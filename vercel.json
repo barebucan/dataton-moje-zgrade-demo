@@ -27,6 +27,40 @@
           "value": "DENY"
         }
       ]
+    },
+    {
+      "source": "/guide",
+      "headers": [
+        {
+          "key": "Content-Type",
+          "value": "text/plain; charset=utf-8"
+        }
+      ]
+    },
+    {
+      "source": "/report",
+      "headers": [
+        {
+          "key": "Content-Type",
+          "value": "text/plain; charset=utf-8"
+        }
+      ]
+    },
+    {
+      "source": "/plan",
+      "headers": [
+        {
+          "key": "Content-Type",
+          "value": "text/plain; charset=utf-8"
+        }
+      ]
+    }
+  ],
+  "redirects": [
+    {
+      "source": "/download",
+      "destination": "https://github.com/barebucan/dataton-moje-zgrade-demo/releases/download/final-v203-20261107/moje-zgrade-runtime-mz-systematic-20261107-v203.tar.gz",
+      "permanent": false
     }
   ]
 }

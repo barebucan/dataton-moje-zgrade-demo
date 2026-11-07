@@ -1,11 +1,11 @@
 import {mkdir,writeFile,cp,readdir,readFile} from 'node:fs/promises';
 import {execFileSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
-const url='https://github.com/barebucan/dataton-moje-zgrade-demo/releases/download/snapshot-20261107/moje-zgrade-runtime-20261107.tar.gz';
+const url='https://github.com/barebucan/dataton-moje-zgrade-demo/releases/download/final-v203-20261107/moje-zgrade-runtime-mz-systematic-20261107-v203.tar.gz';
 const response=await fetch(url);
 if(!response.ok) throw Error('Snapshot download failed: '+response.status);
 const data=Buffer.from(await response.arrayBuffer());
-if(createHash('sha256').update(data).digest('hex')!=='c7005fe4c71ffd9df056a95eeb4bf20fcef9a2a4e651a71b8aa363e998d96b81') throw Error('Snapshot integrity check failed');
+if(createHash('sha256').update(data).digest('hex')!=='62ecc489038588993c3854fbb22fd1a5c26b171cbef72fe25b083f50e7e61a03') throw Error('Snapshot integrity check failed');
 await writeFile('/tmp/mz-runtime.tar.gz',data);await mkdir('api',{recursive:true});
 execFileSync('tar',['-xzf','/tmp/mz-runtime.tar.gz','-C','api']);
 for(const name of await readdir('api/runtime')) {
@@ -17,3 +17,7 @@ for(const name of await readdir('api/runtime')) {
 }
 await cp('api/runtime/web','public',{recursive:true});
 console.log('Independent offline building runtime prepared.');
+
+const reviewPath='public/review.html';
+const review=await readFile(reviewPath,'utf8');
+await writeFile(reviewPath,review.replace('Interni izvorni paket s manifestom read-only baza','Javni runtime s obrađenim bazama (TAR.GZ)'));

@@ -1,0 +1,69 @@
+{
+  "verified_at": "2026-11-07T18:13:55.392940+01:00",
+  "app": "Moje zgrade",
+  "url": "https://moje-zgrade-delta.vercel.app",
+  "deployment": "dpl_CgPqEFogz76tFPoXo7Qg6traBHGW",
+  "asset_revision": "mz-systematic-20261107-v203",
+  "owner_release_label": "final-handover-20261107-v203",
+  "owner_archive_sha256": "e8ece2e6e357e640bcafea406f615f50d6db1722d63d8baea8f7d7d92ca40882",
+  "runtime_archive_sha256": "62ecc489038588993c3854fbb22fd1a5c26b171cbef72fe25b083f50e7e61a03",
+  "counts": {
+    "outlines": 129365,
+    "renewal_records": 7898,
+    "renewal_mapped_records": 4988,
+    "renewal_mapped_outlines": 4211,
+    "renewal_completed_points": 93,
+    "flood_assignments": 388095,
+    "renewal_project_footprints": {
+      "cadastral": 72,
+      "topographic": 4
+    },
+    "renewal_locations": {
+      "outline": 4988,
+      "footprint": 73,
+      "point": 2796,
+      "unlocated": 41
+    }
+  },
+  "passed": true,
+  "browser_checks": [
+    "sealed_release_identity",
+    "no_initial_building_selection",
+    "solar_map_layer",
+    "renewal_map_layer",
+    "flood_map_layer",
+    "energy_map_layer",
+    "three_flood_scenarios",
+    "address_search_and_building_detail",
+    "renewal_list_search_and_detail",
+    "mobile_390_detail_and_theme_changes",
+    "sources_review_documentation_and_evidence_links"
+  ],
+  "all_compact_records_compared": 7898,
+  "exact_project_details_compared": [
+    "capital-execution:jabuka-extension-2018",
+    "capital-execution:jabukovac-extension-2018",
+    "capital-execution:krsnjavi-hall-2018",
+    "capital-execution:mihanovic-reconstruction-extension-2018",
+    "capital-execution:zagorka-hall-lighting-2018",
+    "capital-execution:zganac-extension-2018",
+    "capital-execution:jabukovac-sanacija-2019",
+    "capital-execution:tin-ujevic-extension-2019",
+    "unizg:fsb-orchid",
+    "114",
+    "35",
+    "52",
+    "10001",
+    "10002",
+    "10003"
+  ],
+  "download_redirect_verified": true,
+  "depends_on_bartol": false,
+  "provider": "Vercel Hobby",
+  "limitations": [
+    "Obnova nije iscrpan registar svih obnova Zagreba.",
+    "41 zapis nema potvrđenu lokaciju.",
+    "Solar uključuje jasno označene procjene; poplavni prikaz nije jamstvo odsutnosti rizika."
+  ],
+  "owner_thread_completed": true
+}

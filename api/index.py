@@ -5,6 +5,8 @@ BASE=Path(os.environ.get('MZ_RUNTIME',str(Path(__file__).resolve().parent/'runti
 sys.path.insert(0,str(BASE))
 import server
 import fast_themes
+import flood_overview
+flood_overview.install(fast_themes)
 fast_themes.queue=lambda ids:None
 fast_themes.retry=lambda ids:None
 class handler(server.Handler):

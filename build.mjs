@@ -21,3 +21,8 @@ console.log('Independent offline building runtime prepared.');
 const reviewPath='public/review.html';
 const review=await readFile(reviewPath,'utf8');
 await writeFile(reviewPath,review.replace('Interni izvorni paket s manifestom read-only baza','Javni runtime s obrađenim bazama (TAR.GZ)'));
+
+await cp('overrides','public',{recursive:true});
+
+const serverPath='api/runtime/server.py';
+await writeFile(serverPath,(await readFile(serverPath,'utf8')).replaceAll("['mala','srednja','velika']","['mala','srednja','velika','overview']"));

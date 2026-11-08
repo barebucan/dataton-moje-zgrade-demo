@@ -2,7 +2,7 @@ from pathlib import Path
 import sys,os,json
 from urllib.parse import urlparse,parse_qs,unquote
 BASE=Path(os.environ.get('MZ_RUNTIME',str(Path(__file__).resolve().parent/'runtime')))
-sys.path.insert(0,str(BASE))
+sys.path[:0]=[str(BASE),str(Path(__file__).resolve().parent)]
 import server
 import fast_themes
 import flood_overview

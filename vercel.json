@@ -4,7 +4,7 @@
   "framework": null,
   "functions": {
     "api/index.py": {
-      "includeFiles": "api/runtime/**",
+      "includeFiles": "api/**",
       "maxDuration": 60
     }
   },

@@ -175,6 +175,81 @@ body[data-theme=renewal] .legend .theme-scale i{border-width:2px}
 
 .project-date.project-work-year{font-size:14px;color:#173d36}
 
+/* Building cards: the same short result and closed evidence in all four themes. */
+#detail .building-result{--result-color:#47685b;border-left:4px solid var(--result-color);background:#f0f5ec;border-radius:0 10px 10px 0;padding:14px 16px;margin:14px 0 16px}
+#detail .building-result p{margin:0}
+#detail .building-result .card-label,#detail .building-result .card-context{font-size:12px;line-height:1.45;color:#4c6358;margin-bottom:6px}
+#detail .building-result .theme-result{font-size:25px!important;line-height:1.2;font-weight:750;letter-spacing:-.35px;margin:0 0 9px!important;overflow-wrap:normal}
+#detail .building-result .card-unit{font-size:17px;font-weight:550}
+#detail .building-result .card-meaning{font-size:14px;line-height:1.5}
+#detail .building-result .card-limit{font-size:12px;line-height:1.5;color:#596c61;margin-top:8px}
+#detail .card-tag{display:inline-block;background:#f3e8fc;color:#653d80;border:1px solid #c3a9d6;border-radius:5px;font-size:11px;font-weight:750;padding:3px 7px;margin-bottom:10px}
+#detail .card-energy-classes{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:4px 0 12px}
+#detail .card-energy-classes div{display:flex;flex-direction:column;align-items:flex-start;gap:6px;min-width:0}
+#detail .card-energy-classes dt{font-size:12px;color:#4c6358}
+#detail .card-energy-classes dd{display:flex;align-items:center;justify-content:center;min-width:55px;min-height:47px;padding:4px 10px;margin:0;background:white;border:3px solid var(--class-color);border-radius:8px;color:#173d36;font-size:26px;font-weight:750}
+#detail>.detail-name{margin:5px 0 6px;font-size:23px!important;line-height:1.25;overflow-wrap:anywhere}
+#detail>.address{margin:0 0 8px;font-size:13px;line-height:1.45;color:#52695e}
+#detail .card-details,#detail .card-map-data{padding:0;margin:0;border:0;border-top:1px solid #dce4d7}
+#detail .card-details>summary,#detail .card-map-data>summary{padding:13px 0;min-height:46px;cursor:pointer;font-size:14px;font-weight:650;line-height:1.45}
+#detail .card-map-data>summary{font-size:12px;font-weight:500;color:#596c61}
+#detail .card-details-body{padding:0 0 14px}
+#detail .card-details-body h3{font-size:16px;line-height:1.4}
+#detail .card-details-body p,#detail .card-details-body li{font-size:13px}
+#detail .card-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding-top:12px}
+#detail .card-actions button{font-size:12px;min-height:44px;padding:8px;line-height:1.35}
+#detail .card-search{font-size:13px;min-height:44px;width:100%;margin:3px 0 12px}
+#detail .card-record-count{font-size:12px;color:#596c61;margin-top:0}
+#detail .renewal-record{border:1px solid #d7e1d2;border-radius:8px;padding:0;margin:8px 0;background:#fff}
+#detail .renewal-record>summary{padding:12px;min-height:46px;cursor:pointer;font-size:13px;line-height:1.45}
+#detail .renewal-record>summary strong{font-weight:650}
+#detail .renewal-record>summary small{display:block;color:#53685d;font-size:12px;font-weight:400;margin-top:4px}
+#detail .concise-project{border:0;padding:0 12px 10px}
+#detail .concise-project>.project-status{font-size:16px!important;line-height:1.4;margin:5px 0 10px!important;padding:8px 10px}
+#detail .concise-project>.project-kind{font-size:13px;font-weight:650}
+#detail .concise-project>.project-date{font-size:12px}
+#detail .project-evidence{font-size:12px;border-top:1px solid #dce4d7;padding-top:6px}
+#detail .project-evidence>summary{min-height:42px;padding:10px 0;cursor:pointer}
+#detail .project-evidence-content{overflow-wrap:anywhere}
+#detail .project-evidence-content .project-status{font-size:15px!important}
+#detail .share-input{width:100%;box-sizing:border-box}
+@media(max-width:720px){
+ .has-detail #detail{max-height:68%;padding:14px 16px;border-radius:14px}
+ .has-detail.detail-expanded #detail{max-height:88%}
+ .has-detail #detail .detail-head{top:-14px;margin-top:-4px;background:#fbfcf7}
+ #detail>.detail-name{font-size:20px!important}
+ #detail .building-result{padding:12px 13px;margin:12px 0}
+ #detail .building-result .theme-result{font-size:23px!important}
+ #detail .building-result .card-meaning{font-size:13px}
+ #detail .card-energy-classes dd{font-size:24px;min-height:43px}
+ #detail .card-details>summary{font-size:13px}
+ #detail .card-actions{padding-top:8px}
+}
+
+#detail .card-tag.source-tag{background:#fff0d5;color:#81510d;border-color:#cbaa71}
+#detail .renewal-record-wrap{position:relative}
+#detail .renewal-record-wrap .renewal-record>summary{padding-right:70px}
+#detail .record-source{position:absolute;top:5px;right:5px;min-height:44px;min-width:54px;display:flex;align-items:center;justify-content:center;font-size:12px;border-radius:6px}
+#detail .record-source:hover{background:#edf2e7}
+
+#detail .card-location{font-size:12px;color:#596c61;line-height:1.5;margin:8px 0 14px}
+#detail .card-actions:has(button:only-child){grid-template-columns:1fr}
+
+#detail>.detail-name{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+#detail .record-full-name{font-size:15px;line-height:1.45;overflow-wrap:anywhere}
+
+@media(max-width:720px) and (max-height:740px){
+ .has-detail #detail,.has-detail.detail-expanded #detail{max-height:calc(100% - 12px)}
+ .has-detail #detail .detail-expand{display:none!important}
+ #detail>.detail-name{-webkit-line-clamp:2;font-size:18px!important}
+ #detail .building-result{padding:10px 12px;margin:10px 0}
+ #detail .building-result .card-meaning{font-size:12px;line-height:1.45}
+ #detail .building-result .card-limit{font-size:11px}
+}
+
+#detail .card-energy-classes dd[data-multi]{font-size:17px;max-width:100%;box-sizing:border-box;white-space:normal;text-align:center}
+#detail .project-kind:empty{display:none}
+
 .flood-comparison{width:100%;border-collapse:collapse;font-size:12px;margin:16px 0}.flood-comparison th,.flood-comparison td{padding:10px 5px;border-bottom:1px solid #d4ded7;text-align:left}.flood-comparison button{font:inherit;color:#174d40;background:#edf3ee;border:1px solid #b9cdbd;padding:6px;border-radius:6px;cursor:pointer}.theme-context #theme-caption{font-weight:650}body[data-theme="flood"] .theme-scale{gap:8px}body[data-theme="flood"] #scenario-control{font-weight:700}
 
 /* UX v205: outcome within the compact mobile building sheet. */

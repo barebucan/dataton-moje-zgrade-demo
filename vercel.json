@@ -54,12 +54,25 @@
           "value": "text/plain; charset=utf-8"
         }
       ]
+    },
+    {
+      "source": "/vector/v207/:z/:x/:y.pbf",
+      "headers": [
+        {
+          "key": "Content-Type",
+          "value": "application/vnd.mapbox-vector-tile"
+        },
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
+      ]
     }
   ],
   "redirects": [
     {
       "source": "/download",
-      "destination": "https://github.com/barebucan/dataton-moje-zgrade-demo/releases/download/final-v203-20261107/moje-zgrade-runtime-mz-systematic-20261107-v203.tar.gz",
+      "destination": "https://github.com/barebucan/dataton-moje-zgrade-demo/releases/download/final-v213-20261108/moje-zgrade-runtime-final-v213.tar.gz",
       "permanent": false
     }
   ]

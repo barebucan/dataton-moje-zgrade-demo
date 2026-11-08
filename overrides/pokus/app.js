@@ -1,3 +1,5 @@
+let searchBusy=false,lastSearchInputAt=0;
+let vectorMode=false,vectorNeedsRefresh=false,recoveringVector=false;
 let activeTheme='energy',floodScenario='overview',themeSequence=0,colorController,colorTimer,colorSequence=0;const colorCache=new Map();let focusedProject=null;let renewalPoints=[],renewalFootprints=[],pointSequence=0,pointController;
 const $=s=>document.querySelector(s),esc=s=>String(s??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;');
 const classes=['A+','A','B','C','D','E','F','G'],colors={'A+':'#157646',A:'#238742',B:'#6e912b',C:'#c9ad27',D:'#dc8a25',E:'#d7632b',F:'#c54238',G:'#a92b3b',multi:'#73568f',unknown:'#a3ada7'};
@@ -46,10 +48,12 @@ function searchRow(r,index,count=1,visibleById){
  return '<button class="row '+(!r.targets.length?'unresolved':'')+'" data-record-index="'+index+'">'+(activeTheme==='energy'?badge(r[state.indicator]):themed?themeRowBadge(themed):'<span class="theme-row-value" aria-hidden="true">⌕</span>')+'<span><strong>'+esc(r.address||r.name)+'</strong><small>'+esc(r.city)+' · '+esc(useful(r.unit)||r.display_name||useful(r.name)||'Adresa na obrisu')+'</small><small>'+(activeTheme!=='energy'?esc(themeHint):count>1?recordCount(count)+' pronađeno':(String(r.record).startsWith('outline:')?'Adresa na obrisu · bez certifikata':esc(qualityNames[r.status]||r.status)+' · '+esc(r.issued)))+'</small></span><span aria-hidden="true">›</span></button>';
 }
 function renderList(){
+ if(vectorMode&&ready&&map.getZoom()>=15&&!state.q.trim()){visible=VectorView.collect(Math.max(80,limit));byId=new Map(visible.map(f=>[f.properties.id,f]))}
  const wasSearching=document.body.classList.contains('searching');document.body.classList.toggle('searching',Boolean(state.q.trim()));if(ready&&wasSearching!==Boolean(state.q.trim()))map.resize();
  $('#view-title').textContent=state.q.trim()?'Rezultati pretrage':'Na karti';
  const overview=clusters.length>0&&!state.q.trim();if(document.body.classList.contains('overview')!==overview){document.body.classList.toggle('overview',overview);if(ready&&innerWidth>720)map.resize()}
  if(state.q.trim()){
+  if(searchBusy){$('#stats').textContent='Pretražujem adrese u Zagrebu…';$('#list').innerHTML='<div class="empty" role="status">Pretražujem adrese…</div>';$('#more').hidden=true;return}
   $('#stats').textContent=fmt(searchTotal)+' rezultata u Zagrebu';
   const groups=new Map();
   searchResults.forEach((r,index)=>{const key=r.targets.length===1?r.targets[0].id:'record:'+r.record;if(!groups.has(key))groups.set(key,{r,index,count:0});groups.get(key).count++});
@@ -58,7 +62,7 @@ function renderList(){
   $('#more').hidden=true;return;
  }
  const known=visible.filter(f=>activeTheme==='energy'?f.properties.record_count>0:f.properties.theme_name===activeTheme&&f.properties.theme_known).length;
- $('#stats').textContent=clusters.length?fmt(clusters.reduce((n,c)=>n+c.count,0))+' obrisa u grupnom prikazu · približi za pojedine zgrade':fmt(visible.length)+' učitanih obrisa · '+fmt(known)+' s podacima ovog prikaza';
+ $('#stats').textContent=vectorMode&&map.getZoom()>=15?fmt(VectorView.total)+' zgrada u prikazanom kadru':clusters.length?fmt(clusters.reduce((n,c)=>n+c.count,0))+' obrisa u grupnom prikazu · približi za pojedine zgrade':fmt(visible.length)+' učitanih obrisa · '+fmt(known)+' s podacima ovog prikaza';
  const sorted=[...visible].sort((a,b)=>Number(activeTheme==='energy'?b.properties.record_count>0:b.properties.theme_known)-Number(activeTheme==='energy'?a.properties.record_count>0:a.properties.theme_known)||a.properties.name.localeCompare(b.properties.name,'hr'));
  $('#list').innerHTML=sorted.length?sorted.slice(0,limit).map(row).join(''):'<div class="empty">'+(clusters.length?'Približi kartu ili pretraži adresu za pojedine zgrade.':'U ovom kadru nema prikazanih obrisa. Pokušaj približiti ili promijeniti područje.')+'</div>';
  $('#more').hidden=limit>=sorted.length;
@@ -79,7 +83,10 @@ function patterns(){
 
 }
 let themeRevision='',summaryReady=Promise.resolve(),refreshingThemes=false;
+let basemapStarted=false,lastMapMotion=0,lastProjectGeometry='',lastSelectionGeometry='';
+function startBasemap(){if(basemapStarted||!ready)return;basemapStarted=true;map.addSource('osm',basemapDefinition.sources.osm);map.addLayer(basemapDefinition.layers[0],'volumes')}
 let geometryDirty=true,lastGeometryKey='',lastPaint='',coverage=null,pendingMap=null,mapCache=new Map();
+let renderedVolumeIds=new Set(),renderedGeometryQuality='';const retainedVolumes=new Map(),retainedOutlines=new Map(),appliedMapStates=new Map();
 function mapData(){
  const shown=selected&&state.id&&!visible.some(f=>f.properties.id===state.id)?visible.concat([selected]):visible;
  return {type:'FeatureCollection',features:shown.flatMap(f=>{
@@ -91,28 +98,59 @@ function mapData(){
 
 function renderMap(){
  if(!ready)return;
+ if(vectorMode){
+  VectorView.paint();
+  const key=selected?.properties.id||'';
+  if(map.getSource('selected-building')&&key!==lastSelectionGeometry){
+   map.getSource('selected-building').setData({type:'FeatureCollection',features:selected?[{type:'Feature',geometry:selected.geometry,properties:{oid:key,part:false}}]:[]});
+   lastSelectionGeometry=key;
+  }
+ }
+ else{
  const geometryKey=selected&&state.id&&!visible.some(f=>f.properties.id===state.id)?selected.properties.id:'';
  if(geometryDirty||geometryKey!==lastGeometryKey){
-  map.getSource('buildings').setData(mapData());geometryDirty=false;lastGeometryKey=geometryKey;window.geometryUploads=(window.geometryUploads||0)+1;
+  let data=mapData();const context=state.quality+'|'+themeRevision,reset=renderedGeometryQuality!==context||clusters.length>0;
+  if(reset){retainedVolumes.clear();retainedOutlines.clear()}
+  for(const f of data.features)retainedVolumes.set(f.properties.volume_id,f);
+  for(const f of visible)retainedOutlines.set(f.properties.id,f);
+  if(selected&&state.id)retainedOutlines.set(selected.properties.id,selected);
+  if(retainedVolumes.size>12000){
+   const current=new Set(data.features.map(f=>f.properties.volume_id));
+   for(const id of retainedVolumes.keys())if(!current.has(id))retainedVolumes.delete(id);
+   const currentOutlines=new Set([...visible,...(selected?[selected]:[])].map(f=>f.properties.id));
+   for(const id of retainedOutlines.keys())if(!currentOutlines.has(id))retainedOutlines.delete(id);
+  }
+  data={type:'FeatureCollection',features:[...retainedVolumes.values()]};
+  const nextIds=new Set(retainedVolumes.keys());
+  const source=map.getSource('buildings');
+  if(!renderedVolumeIds.size||reset){source.setData(data);appliedMapStates.clear()}
+  else{
+   const remove=[...renderedVolumeIds].filter(id=>!nextIds.has(id));
+   const add=data.features.filter(f=>!renderedVolumeIds.has(f.properties.volume_id));
+   if(remove.length||add.length)source.updateData({remove,add});
+   for(const id of remove)appliedMapStates.delete(id);
+   window.lastGeometryDiff={added:add.length,removed:remove.length,reused:data.features.length-add.length};
+  }
+  renderedVolumeIds=nextIds;renderedGeometryQuality=context;geometryDirty=false;lastGeometryKey=geometryKey;window.geometryUploads=(window.geometryUploads||0)+1;
  }
  const paintKey=state.indicator+'|'+activeTheme;
  if(lastPaint!==paintKey){
   map.setPaintProperty('volumes','fill-extrusion-pattern',activeTheme==='energy'?['concat','hatch-',['get',state.indicator]]:activeTheme==='solar'?['concat',['case',['get','solar_estimated'],'solar-est-','solar-source-'],['get','solar_class']]:null);
-  if(activeTheme!=='energy')map.setPaintProperty('volumes','fill-extrusion-color',['coalesce',['feature-state','themeColor'],colors.unknown]);
-  map.setPaintProperty('edges','line-color',activeTheme==='energy'?'#52695e':['coalesce',['feature-state','outlineColor'],'#52695e']);
-  map.setPaintProperty('edges','line-width',activeTheme==='energy'?.6:['coalesce',['feature-state','outlineWidth'],.6]);
   lastPaint=paintKey;
  }
- if(activeTheme!=='energy'){
-  const fs=selected&&state.id&&!visible.some(f=>f.properties.id===state.id)?visible.concat([selected]):visible;
+ {
+  const fs=[...retainedOutlines.values()];
   for(const f of fs){
-   const p=f.properties,v=themePalette(p)||p,color=v.theme_name===activeTheme?colors[v.theme_value]||colors.unknown:colors.unknown;
+   const p=f.properties,v=themePalette(p)||p,color=activeTheme==='energy'?'#ffffff':v.theme_name===activeTheme?colors[v.theme_value]||colors.unknown:colors.unknown;
    const estimated=activeTheme==='solar'&&v.theme_data?.estimated;
    const knownRenewal=activeTheme==='renewal'&&['done','planned','not_renewed','progress','mixed','partial'].includes(v.theme_value);
-   const outlineColor=estimated?'#8e4fba':knownRenewal?(v.theme_value==='done'?'#006348':v.theme_value==='not_renewed'?'#842a21':v.theme_value==='planned'?'#765718':v.theme_value==='partial'?'#146f66':'#a75c08'):'#71827b';
-   map.setFeatureState({source:'buildings',id:p.id},{themeColor:color,outlineColor,outlineWidth:knownRenewal?2.2:estimated?1.0:.45});
-   for(const part of p.model_parts||[])map.setFeatureState({source:'buildings',id:p.id+'-'+part.id},{themeColor:color});
+   const outlineColor=activeTheme==='energy'?'#52695e':estimated?'#8e4fba':knownRenewal?(v.theme_value==='done'?'#006348':v.theme_value==='not_renewed'?'#842a21':v.theme_value==='planned'?'#765718':v.theme_value==='partial'?'#146f66':'#a75c08'):'#71827b';
+   const value={themeColor:color,outlineColor,outlineWidth:activeTheme==='energy'?.6:knownRenewal?2.2:estimated?1.0:.45},signature=JSON.stringify(value);
+   for(const id of [p.id,...(p.model_parts||[]).map(part=>p.id+'-'+part.id)]){
+    if(appliedMapStates.get(id)!==signature){map.setFeatureState({source:'buildings',id},value);appliedMapStates.set(id,signature)}
+   }
   }
+ }
  }
  if(map.getSource('projects')){
   const points=[];
@@ -129,7 +167,7 @@ function renderMap(){
     properties:{sid:focusedProject.source_id,code:projectCode(focusedProject)}
    });
   }
-  map.getSource('projects').setData({type:'FeatureCollection',features:points});
+  const data={type:'FeatureCollection',features:points},key=JSON.stringify(data);if(key!==lastProjectGeometry){map.getSource('projects').setData(data);lastProjectGeometry=key}
  }
 
  map.setFilter('selection',['all',['==',['get','oid'],state.id||''],['==',['get','part'],false]]);
@@ -148,7 +186,12 @@ function clusterGroups(features){
 let overviewPromise=null,mapRetryAttempts=0;
 async function mapPayload(box,signal,quality,only){
  if(box[0]>=box[2]||box[1]>=box[3])return {type:"FeatureCollection",features:[],clustered:true,note:"Pretraži adresu u Hrvatskoj ili vrati početni pogled."};
- return json('/api/spatial/map?'+new URLSearchParams({bbox:box.join(','),quality,only:only?'1':'0',dataset:String(summary?.release_version||'audited-20261029-3'),app:'systematic-colors-v5-flood-overview',theme_rev:themeRevision,compact:'1',theme:'energy',scenario:'mala'}),signal);
+ if(quality==='default'&&!only){try{const tiled=await MapTiles.load(box,signal,themeRevision,summary?.map_tiles,d=>{
+  if(!signal.aborted&&!visible.length&&!clusters.length&&d.features.length){
+   visible=d.features;byId=new Map(visible.map(f=>[f.properties.id,f]));geometryDirty=true;applyThemeSeed();renderMap();$('#loading').hidden=true;
+  }
+ },map.getCenter());if(tiled)return tiled}catch(e){if(signal.aborted)throw e}}
+ return json('/api/spatial/map?'+new URLSearchParams({bbox:box.join(','),quality,only:only?'1':'0',dataset:String(summary?.release_version||'audited-20261029-3'),app:'final-v213-flood-overview',theme_rev:themeRevision,compact:'1',theme:'energy',scenario:'mala'}),signal);
 }
 async function refreshThemeData(){
  if(!ready||refreshingThemes||document.hidden)return;
@@ -156,6 +199,7 @@ async function refreshThemeData(){
  try{
   const d=await json('/api/themes/revision',AbortSignal.timeout(3000));
   if(d.revision===themeRevision)return;
+  if(vectorMode){toast('Podaci su osvježeni. Ponovno učitaj kartu.');return}
   const ids=[...new Set(visible.map(f=>f.properties.id).concat(selected?[selected.properties.id]:[]))];
   const before=geometryUploads;
   const response=await fetch('/api/themes/palettes',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ids}),signal:AbortSignal.timeout(5000)});
@@ -172,8 +216,8 @@ async function refreshThemeData(){
     for(const id of [p.id,...(p.model_parts||[]).map(part=>p.id+'-'+part.id)])updates.push({id,addOrUpdateProperties});
    }
   }
-  if(updates.length){map.getSource('buildings').updateData({update:updates});window.solarPatternUpdates=(window.solarPatternUpdates||0)+updates.length}
-  themeRevision=payload.revision||d.revision;projectsRevision='';mapCache.clear();colorCache.clear();detailCache.clear();
+  if(updates.length&&!vectorMode){map.getSource('buildings').updateData({update:updates});window.solarPatternUpdates=(window.solarPatternUpdates||0)+updates.length}
+  themeRevision=payload.revision||d.revision;geometryDirty=true;projectsRevision='';mapCache.clear();colorCache.clear();detailCache.clear();
   for(const f of visible)if(payload.values[f.properties.id])f.properties.theme_seed=payload.values[f.properties.id];
   if(selected&&payload.values[selected.properties.id])selected.properties.theme_seed=payload.values[selected.properties.id];
   applyThemeSeed();renderMap();renderList();loadRenewalPoints();
@@ -212,13 +256,44 @@ async function loadRenewalPoints(){
   if(pointController===controller)pointController=null;
  }
 }
+async function loadVectorMap(){
+ if(!ready)return;
+ $('#map-recovery').hidden=true;
+ if(map.getZoom()>=15){
+  mapController?.abort();pendingMap=null;
+  for(const c of clusters)c.marker.remove();clusters=[];
+  VectorView.paint();renderList();
+  if(map.isSourceLoaded('buildings')){
+   $('#loading').hidden=true;$('#map-badge').textContent='Zgrade · odaberi zgradu.';
+   if(!basemapStarted)startBasemap();
+  }
+  return;
+ }
+ mapController?.abort();const controller=mapController=new AbortController(),seq=++mapSequence;
+ const b=map.getBounds(),box=[b.getWest(),b.getSouth(),b.getEast(),b.getNorth()];
+ pendingMap={seq};
+ try{
+  const d=await json('/api/vector/overview?'+new URLSearchParams({bbox:box.join(','),quality:state.quality,theme:activeTheme}),controller.signal);
+  if(seq!==mapSequence)return;
+  for(const c of clusters)c.marker.remove();clusters=[];visible=[];
+  for(const f of clusterGroups(d.features)){
+   const el=document.createElement('button');el.className='cluster-button';el.textContent=fmt(f.properties.count);el.setAttribute('aria-label',fmt(f.properties.count)+' grupiranih obrisa. Približi za pojedine zgrade.');
+   const marker=new maplibregl.Marker({element:el}).setLngLat(f.geometry.coordinates).addTo(map);
+   el.onclick=()=>map.easeTo({center:f.geometry.coordinates,zoom:16.5,pitch:state.mode==='2d'?0:52,duration:350});
+   clusters.push({marker,count:f.properties.count});
+  }
+  $('#loading').hidden=true;$('#map-badge').textContent='Približi kartu za pojedine zgrade.';renderList();if(!basemapStarted)startBasemap();
+ }catch(e){if(e.name!=='AbortError'){$('#map-recovery').hidden=false;$('#loading').hidden=true}}
+ finally{if(pendingMap?.seq===seq)pendingMap=null}
+}
 async function loadMap(){
  if(!ready)return;
- if(!themeRevision)await Promise.race([summaryReady,new Promise(resolve=>setTimeout(resolve,120))]);
+ if(vectorMode)return loadVectorMap();
+ if(!themeRevision)await summaryReady;
  $('#map-recovery').hidden=true;
  const b=map.getBounds(),view=[Math.max(-180,b.getWest()),Math.max(-85.051,b.getSouth()),Math.min(180,b.getEast()),Math.min(85.051,b.getNorth())],filter=state.quality+'|'+(activeTheme==='energy'&&state.only);
  const inside=(box)=>view[0]>=box[0]&&view[1]>=box[1]&&view[2]<=box[2]&&view[3]<=box[3];
- if(coverage&&coverage.filter===filter&&inside(coverage.box)){if(pendingMap){mapController?.abort();mapSequence++;pendingMap=null}$('#loading').hidden=true;if(activeTheme==='energy'||!applyThemeSeed())$('#map-badge').textContent=clusters.length?'Približi kartu ili pretraži adresu.':'3D zgrade · odaberi zgradu.';return;}
+ if(coverage&&coverage.filter===filter&&inside(coverage.box)){if(pendingMap){mapController?.abort();mapSequence++;pendingMap=null}$('#loading').hidden=true;if(activeTheme==='energy'||!applyThemeSeed())$('#map-badge').textContent=clusters.length?'Približi kartu ili pretraži adresu.':'Zgrade · odaberi zgradu.';return;}
  if(pendingMap&&pendingMap.filter===filter&&pendingMap.detailed===(view[2]-view[0]<.07&&view[3]-view[1]<.055)&&inside(pendingMap.box))return;
  const detailed=view[2]-view[0]<.07&&view[3]-view[1]<.055,step=.0005;
  const box=detailed?[Math.floor(view[0]/step)*step-step,Math.floor(view[1]/step)*step-step,Math.ceil(view[2]/step)*step+step,Math.ceil(view[3]/step)*step+step]:view;
@@ -230,8 +305,8 @@ async function loadMap(){
  let requestTimer;
  try{
   const requestedRevision=themeRevision;
-  const persistentKey='mz-systematic-geometry-v4|'+requestedRevision+'|'+key;
-  let stored=null;if(!cached&&detailed&&summary?.theme_revision)stored=await MapViewCache.read(persistentKey);
+  const persistentKey='mz-systematic-geometry-v206|'+requestedRevision+'|'+key;
+  let stored=null;
   if(seq!==mapSequence)return;
   const d=cached?cached.data:stored||await Promise.race([mapPayload(box,mapController.signal,state.quality,activeTheme==='energy'&&state.only),new Promise((_,reject)=>{requestTimer=setTimeout(()=>reject(Error('Učitavanje je predugo trajalo.')),activeTheme==='solar'?30000:12000)})]);
   if(seq!==mapSequence)return;
@@ -242,7 +317,7 @@ async function loadMap(){
   }
   const thematicError=(d.features||[]).some(f=>f.properties.theme_data?.state==='error');
   $('#theme-source-error').hidden=!thematicError;
-  if(!thematicError&&!cached&&!stored&&detailed&&requestedRevision&&requestedRevision===summary?.theme_revision&&!d.clustered&&!d.truncated)MapViewCache.write(persistentKey,d);
+  if(!thematicError&&!cached&&!stored&&detailed&&requestedRevision&&requestedRevision===summary?.theme_revision&&!d.clustered&&!d.truncated&&!d.static_cells)MapViewCache.write(persistentKey,d);
   if(seq!==mapSequence)return;
   mapRetryAttempts=0;$('#map-recovery').hidden=true;
   if(!thematicError&&!cached){mapCache.set(key,{filter,box,data:d});if(mapCache.size>10)mapCache.delete(mapCache.keys().next().value)}
@@ -254,27 +329,28 @@ async function loadMap(){
    for(const f of clusterGroups(d.features)){
     const el=document.createElement('button');el.className='cluster-button';el.textContent=fmt(f.properties.count);el.setAttribute('aria-label',fmt(f.properties.count)+' grupiranih obrisa. Približi za pojedine zgrade.');
     const marker=new maplibregl.Marker({element:el}).setLngLat(f.geometry.coordinates).addTo(map);
-    el.onclick=()=>map.easeTo({center:f.geometry.coordinates,zoom:16.5,pitch:52,duration:500});
+    el.onclick=()=>map.easeTo({center:f.geometry.coordinates,zoom:16.5,pitch:state.mode==='2d'?0:52,duration:500});
     clusters.push({marker,count:f.properties.count});
    }
   }else {visible=d.features;byId.clear();for(const f of visible)byId.set(f.properties.id,f)}
   window.projectPoints=d.project_points||{type:'FeatureCollection',features:[]};limit=30;const seeded=applyThemeSeed();renderMap();renderList();
   if(activeTheme==='energy'||!seeded)$('#map-badge').textContent=d.note||'3D zgrade · klikni za podatke i razlog spoja';
-  $('#loading').hidden=true;if(activeTheme!=='energy'&&!seeded)loadThemeColors();
+  $('#loading').hidden=true;if(!basemapStarted)map.once('idle',startBasemap);if(activeTheme!=='energy'&&!seeded)loadThemeColors();
  }catch(e){if(e.name!=='AbortError'&&seq===mapSequence){$('#loading').hidden=true;$('#stats').textContent='Pregled podataka trenutačno nije dostupan.';if(mapRetryAttempts<1){mapRetryAttempts++;$('#map-badge').textContent='Ponovno pokušavam učitati podatke…';setTimeout(()=>{if(seq===mapSequence)loadMap()},600)}else{$('#map-badge').textContent='Podaci se nisu učitali.';$('#map-recovery').hidden=false}}}finally{clearTimeout(requestTimer);if(pendingMap?.seq===seq)pendingMap=null}
 }
 async function search(){
+ const searchStarted=lastSearchInputAt||performance.now();lastSearchInputAt=0;
  if(searchController)searchController.abort();searchController=new AbortController();const seq=++searchSequence;
- if(!state.q.trim()){searchResults=[];searchTotal=0;renderList();return}
- $('#stats').textContent='Pretražujem adrese u Zagrebu…';
- try{const d=await json('/api/spatial/search?q='+encodeURIComponent(state.q)+(activeTheme!=='energy'?'&theme='+activeTheme:''),searchController.signal);if(seq!==searchSequence)return;searchResults=d.records;searchTotal=d.total;renderList();if(innerWidth<=720&&state.q.trim()&&$('#detail').hidden)setView('list')}
- catch(e){if(e.name!=='AbortError'){$('#stats').textContent='Pretraga nije dostupna';toast(e.message)}}
+ if(!state.q.trim()){searchBusy=false;searchResults=[];searchTotal=0;renderList();if(innerWidth<=720)setView('map');return}
+ searchBusy=true;renderList();
+ try{const d=await json('/api/spatial/search?q='+encodeURIComponent(state.q)+(activeTheme!=='energy'?'&theme='+activeTheme:''),searchController.signal);if(seq!==searchSequence)return;searchBusy=false;searchResults=d.records;searchTotal=d.total;renderList();document.body.dataset.searchReadyMs=String(Math.round(performance.now()-searchStarted));if(innerWidth<=720&&state.q.trim()&&$('#detail').hidden)setView('list')}
+ catch(e){if(e.name!=='AbortError'&&seq===searchSequence){searchBusy=false;$('#stats').textContent='Pretraga nije dostupna';toast(e.message)}}
 }
 function home(){
  if(!ready)return;
  if(state.area==='hr'){map.fitBounds([[13.4,42.3],[19.55,46.65]],{padding:{top:40,bottom:130,left:24,right:24},pitch:30,bearing:0,duration:0});loadMap();return}
  const center=areas[state.area]||areas.kruge;
- map.jumpTo({center,zoom:state.area==='hr'?6.5:state.area==='zagreb'?12.5:17.2,pitch:52,bearing:-22});loadMap();
+ map.jumpTo({center,zoom:state.area==='hr'?6.5:state.area==='zagreb'?12.5:17.2,pitch:state.mode==='2d'?0:52,bearing:state.mode==='2d'?0:-22});loadMap();
 }
 function evidenceText(r){
  const e=r.link_evidence||{},m=r.link_method||'';let lines=[];
@@ -388,10 +464,7 @@ function certificateSummary(p,cs){
  }
  return '<div class="class-pair"><div><small>Grijanje</small><b>'+esc(p.heating==='unknown'?'—':p.heating)+'</b></div><div><small>Primarna energija</small><b>'+esc(p.primary==='unknown'?'—':p.primary)+'</b></div></div><p class="record-summary">'+(cs.length?'Izdano '+esc(cs[0].issued):'Nema pridruženog certifikata')+'</p>';
 }
-function renderEnergyDetail(f){
- const p=f.properties,c=chosenClass(p),cs=p.certificates||[];const name=detailName(p),scope=cs.length===1?useful(cs[0].unit_name):'',nameIsScope=scope===name;
- $('#detail').innerHTML='<div class="detail-head"><span class="eyebrow">'+esc(qualityNames[p.quality]||'Bez povezanog zapisa')+'</span><button class="close-icon" data-action="close" aria-label="Zatvori detalj">×</button></div>'+(nameIsScope?'<span class="detail-field-label">Cjelina iz certifikata</span>':'')+ '<h2 class="detail-name">'+esc(name)+'</h2>'+((norm(name)===norm(p.address)&&p.city)?'<p class="address">'+esc(p.city)+'</p>':norm(name)===norm(p.address)?'':'<p class="address">'+esc(p.address||'Adresa nije upisana na obrisu')+(p.city?' · '+esc(p.city):'')+'</p>')+certificateSummary(p,cs)+(cs.length===1&&!nameIsScope?'<p class="scope-source"><b>Obuhvat iz izvoda:</b> '+esc(scope||'Nije pobliže opisan')+'</p>':'')+'<div class="status-box"><b>'+(c==='unknown'?'Za odabrani filtar nema pridruženog zapisa':'Obuhvat cijele zgrade nije potvrđen')+'</b></div>'+(cs.length===1?singleCertificateSource(cs[0]):cs.length?certificateGroups(cs,preferredSourceAddress||p.address||''):'<p>Nije pronađen prostorni spoj. To ne dokazuje da certifikat ne postoji.</p>')+(p.consumption?'<details class="consumption-disclosure"><summary>Dodatno: potrošnja javnog objekta</summary>'+consumptionPanel(p.consumption)+'</details>':'')+'<details class="detail-section"><summary>Obris i 3D visina</summary><p>'+esc(p.height_basis)+'</p><p>'+esc(p.model_geometry||'')+(p.part_count?' · '+p.part_count+' dijelova':'')+'</p><p>'+esc(p.roof_basis||'')+'</p><p>'+((p.equivalent_outline_ids||[]).length>1?'Jednaki obrisi iz više izvora: '+esc(p.equivalent_outline_ids.join(', '))+'.':'')+'</p>'+(p.geometry_source==='DGU'?'<a href="https://dgu.gov.hr/otvoreni-podaci-6596/6596" target="_blank" rel="noreferrer">DGU · '+esc(p.source_id)+' ↗</a>':'<a href="https://www.openstreetmap.org/'+p.osm_type+'/'+p.osm_id+'" target="_blank" rel="noreferrer">OpenStreetMap · '+p.id+' ↗</a>')+'</details><button class="detail-map-button" data-action="show-map">Pokaži na karti</button><button class="share" data-action="share">Kopiraj poveznicu karte</button><input class="share-input" readonly aria-label="Poveznica karte" hidden>';
-}
+function renderEnergyDetail(f){BuildingCards.energy(f)}
 let preferredSourceAddress='',detailSequence=0,detailSuppressed=false,detailController;
 const detailCache=new Map();
 function beginDetailRequest(){
@@ -427,6 +500,7 @@ function openDetail(){
 }
 function center(f){const rings=f.geometry.type==='Polygon'?f.geometry.coordinates:f.geometry.coordinates.flat();const pts=rings.flat();return [pts.reduce((a,p)=>a+p[0],0)/pts.length,pts.reduce((a,p)=>a+p[1],0)/pts.length]}
 async function choose(id,push=true,fly=true,sourceAddress='',revisionRetry=0){
+ const cardStarted=performance.now();
  detailSuppressed=false;
  focusedProject=null;
  preferredSourceAddress=sourceAddress;
@@ -462,7 +536,20 @@ async function choose(id,push=true,fly=true,sourceAddress='',revisionRetry=0){
    detailController=controller;
    detailTimeout=setTimeout(()=>{timedOut=true;controller.abort()},8000);
   }
-  const f=cached||await json('/api/spatial/building/'+encodeURIComponent(id)+'?quality='+quality+'&theme='+activeTheme+'&scenario='+floodScenario,controller?.signal);
+  let f=cached;
+  if(!f){
+   const packet=await json('/api/spatial/building/'+encodeURIComponent(id)+'?quality='+quality+'&theme=energy&bundle=1',controller?.signal);
+   if(packet.theme_cards){
+    const base={...packet};delete base.theme_cards;
+    for(const sc of ['mala','srednja','velika'])detailCache.set(id+'|'+quality+'|energy|'+sc,base);
+    for(const [key,properties] of Object.entries(packet.theme_cards)){
+     const [theme,scenario='mala']=key.split(':');
+     for(const sc of (theme==='flood'?[scenario]:['mala','srednja','velika']))detailCache.set(id+'|'+quality+'|'+theme+'|'+sc,{...base,properties});
+    }
+    while(detailCache.size>288)detailCache.delete(detailCache.keys().next().value);
+    f=detailCache.get(detailKey);
+   }else f=packet;
+  }
   if(state.id!==id||state.quality!==quality||detailRequest!==detailSequence)return;
   if(requestedRevision&&requestedRevision!==themeRevision){
    detailCache.delete(detailKey);
@@ -470,9 +557,11 @@ async function choose(id,push=true,fly=true,sourceAddress='',revisionRetry=0){
    revisionChanged=true;
    throw Error('Podaci su osvježeni tijekom učitavanja. Ponovno učitaj detalje.');
   }
-  if(requestedRevision&&!detailCache.has(detailKey)){detailCache.set(detailKey,f);if(detailCache.size>24)detailCache.delete(detailCache.keys().next().value)}
+  if(requestedRevision&&!detailCache.has(detailKey)){detailCache.set(detailKey,f);if(detailCache.size>288)detailCache.delete(detailCache.keys().next().value)}
   if(f.properties.id!==id){state.id=f.properties.id;write(true)}selected=f;byId.set(id,f);renderDetail(f);openDetail();renderMap();renderList();
-  if(fly)map.easeTo({center:center(f),zoom:Math.max(17,map.getZoom()),pitch:52,offset:selectedMapOffset(),duration:450});
+  document.body.dataset.cardReadyMs=String(Math.round(performance.now()-cardStarted));
+  requestAnimationFrame(()=>requestAnimationFrame(()=>{if(detailRequest===detailSequence)document.body.dataset.cardFrameMs=String(Math.round(performance.now()-cardStarted))}));
+  if(fly)map.easeTo({center:center(f),zoom:Math.max(17,map.getZoom()),pitch:state.mode==='2d'?0:52,offset:selectedMapOffset(),duration:450});
  }catch(e){
   if(detailRequest!==detailSequence||state.id!==id)return;
   if(activeTheme==='energy'){toast(e.message);return}
@@ -501,24 +590,49 @@ async function restoreRecord(id){
  if(id.startsWith('renewal-project:')){if(activeTheme==='renewal')openProjectMarkers([id.slice('renewal-project:'.length)],true,false);return}
  try{const r=await json('/api/certificate/'+id);const d=await json('/api/spatial/search?q='+encodeURIComponent(r.certificate));const result=d.records.find(v=>v.record===Number(id));if(result)chooseRecord(result,false)}catch(e){toast(e.message)}
 }
-function close(push=true){focusedProject=null;beginDetailRequest();state.id='';state.rec='';selected=null;$('#detail').hidden=true;$('#map-shell').classList.remove('detail-open');document.body.classList.remove('has-detail','detail-expanded');document.body.style.overflow='';if(ready)map.resize();if(push)write();renderMap();renderList();if(previousFocus?.isConnected&&previousFocus.getClientRects().length)previousFocus.focus({preventScroll:true});else $('#search').focus({preventScroll:true})}
-const basemapDefinition={version:8,sources:{osm:{type:'raster',tiles:['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],tileSize:256,attribution:'© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> suradnici · <a href="https://dgu.gov.hr/otvoreni-podaci-6596/6596">DGU</a> AD 25.10.2026 / BU 7.3.2024 · izvedeni spojevi'}},layers:[{id:'base',type:'raster',source:'osm',paint:{'raster-saturation':-.65,'raster-contrast':-.08,'raster-opacity':.72}}]};
+function close(push=true,restoreFocus=true){focusedProject=null;beginDetailRequest();state.id='';state.rec='';selected=null;$('#detail').hidden=true;$('#map-shell').classList.remove('detail-open');document.body.classList.remove('has-detail','detail-expanded');document.body.style.overflow='';if(ready)map.resize();if(push)write();renderMap();renderList();if(restoreFocus){if(previousFocus?.isConnected&&previousFocus.getClientRects().length)previousFocus.focus({preventScroll:true});else $('#search').focus({preventScroll:true})}}
+const basemapDefinition={version:8,sources:{osm:{type:'raster',tiles:['zgrade-osm://tile.openstreetmap.org/{z}/{x}/{y}.png'],tileSize:256,attribution:'© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> suradnici · <a href="https://dgu.gov.hr/otvoreni-podaci-6596/6596">DGU</a> AD 25.10.2026 / BU 7.3.2024 · izvedeni spojevi'}},layers:[{id:'base',type:'raster',source:'osm',paint:{'raster-saturation':-.65,'raster-contrast':-.08,'raster-opacity':.72}}]};
 async function init(){
  read();
- if(activeTheme==='energy'){state.id='';state.rec=''}
  sync();write(true);$('#scale').innerHTML=classes.map(c=>'<span class="'+light(c)+'" style="--c:'+colors[c]+'">'+c+'</span>').join('')+'<span style="--c:'+colors.multi+'">≋</span>';
  window.energyLegend=$('.legend').innerHTML;
  if(activeTheme!=='energy')themeLegend();
  try{
-  summaryReady=json('/api/spatial/summary',AbortSignal.timeout(2000)).then(d=>{summary=d;themeRevision=d.theme_revision||('session-'+Date.now());$('#source-summary').textContent='Obrađeno '+fmt(summary.total_records)+' IEC zapisa. S obrisima povezano '+fmt(summary.total_records-(summary.outcomes.unresolved||0)-(summary.outcomes.address_only||0))+' zapisa ('+((summary.total_records-(summary.outcomes.unresolved||0)-(summary.outcomes.address_only||0))/summary.total_records*100).toFixed(1)+'%). Kandidati za '+fmt(summary.building_candidates)+' obrisa OSM/DGU. To nisu službeno potvrđeni obuhvati certifikata cijelih zgrada. Izvadak obuhvaća IEC certifikate izdane od 1. 10. 2017.; ne sadrži sve povijesne certifikate.'}).catch(()=>{themeRevision='session-'+Date.now();$('#source-summary').textContent='Sažetak nije dostupan; pokušaj ponovno.'});
-  map=new maplibregl.Map({container:'map',style:{version:8,transition:{duration:0,delay:0},sources:{},layers:[]},center:areas[state.area],zoom:17,pitch:52,bearing:-22,minPitch:20,maxPitch:68,renderWorldCopies:false,attributionControl:{compact:false},canvasContextAttributes:{antialias:true}});
+  summaryReady=(window.mzBootstrap?Promise.resolve(window.mzBootstrap):json('/api/spatial/summary',AbortSignal.timeout(5000))).then(d=>{summary=d;themeRevision=d.theme_revision||('session-'+Date.now());$('#source-summary').textContent='Obrađeno '+fmt(summary.total_records)+' IEC zapisa. S obrisima povezano '+fmt(summary.total_records-(summary.outcomes.unresolved||0)-(summary.outcomes.address_only||0))+' zapisa ('+((summary.total_records-(summary.outcomes.unresolved||0)-(summary.outcomes.address_only||0))/summary.total_records*100).toFixed(1)+'%). Kandidati za '+fmt(summary.building_candidates)+' obrisa OSM/DGU. To nisu službeno potvrđeni obuhvati certifikata cijelih zgrada. Izvadak obuhvaća IEC certifikate izdane od 1. 10. 2017.; ne sadrži sve povijesne certifikate.'}).catch(()=>{themeRevision='session-'+Date.now();$('#source-summary').textContent='Sažetak nije dostupan; pokušaj ponovno.'});
+  VectorRecovery.install();
+  maplibregl.addProtocol('zgrade-osm',async(params,controller)=>{
+   // Keep raster downloads behind building data, including after a pan.
+   const started=performance.now();
+   while(pendingMap||map?.isMoving()||(vectorMode&&map.getZoom()>=15&&!map.isSourceLoaded('buildings'))||performance.now()-lastMapMotion<200){
+    if(controller.signal.aborted)throw new DOMException('Aborted','AbortError');
+    if(performance.now()-started>30000)break;
+    await new Promise(resolve=>setTimeout(resolve,40));
+   }
+   const response=await fetch(params.url.replace('zgrade-osm://','https://'),{signal:controller.signal,priority:'low'});
+   if(!response.ok)throw Error('Kartografska podloga nije dostupna.');
+   return {data:await response.arrayBuffer(),cacheControl:response.headers.get('Cache-Control'),expires:response.headers.get('Expires')};
+  });
+  map=new maplibregl.Map({container:'map',style:{version:8,transition:{duration:0,delay:0},sources:{},layers:[]},center:areas[state.area],zoom:17,pitch:state.mode==='2d'?0:52,bearing:state.mode==='2d'?0:-22,minPitch:0,maxPitch:68,renderWorldCopies:false,attributionControl:{compact:false},pixelRatio:Math.min(window.devicePixelRatio||1,1.5),canvasContextAttributes:{antialias:false}});
+  MapViewMode.setup();
   map.addControl(new maplibregl.NavigationControl({showCompass:true}),'top-right');
-  map.on('error',e=>{if(e.sourceId==='osm')$('#tile-warning').hidden=false});
+  map.on('error',e=>{
+   if(e.sourceId==='osm')$('#tile-warning').hidden=false;
+   if(e.sourceId==='buildings'&&vectorMode&&!recoveringVector&&e.error?.name!=='AbortError'){
+    recoveringVector=true;
+    try{VectorRecovery.fail(summary.vector_tiles.revision)}
+    catch{const url=new URL(location.href);url.searchParams.set('legacy-map','1');location.replace(url)}
+   }
+  });
   map.once('load',async()=>{
-   map.addSource('osm',basemapDefinition.sources.osm);map.addLayer(basemapDefinition.layers[0]);patterns();map.addSource('buildings',{type:'geojson',generateId:false,promoteId:'volume_id',data:{type:'FeatureCollection',features:[]}});
-   map.addLayer({id:'volumes',type:'fill-extrusion',source:'buildings',filter:['==',['get','render_parent'],true],paint:{'fill-extrusion-pattern':['get','pattern'],'fill-extrusion-height':['get','height'],'fill-extrusion-base':['get','base_height'],'fill-extrusion-opacity':.94}});
-   map.addLayer({id:'edges',type:'line',source:'buildings',filter:['==',['get','part'],false],paint:{'line-color':'#52695e','line-width':.6,'line-opacity':.65}});
-   map.addLayer({id:'selection',type:'line',source:'buildings',filter:['==',['get','oid'],''],paint:{'line-color':'#ffbb25','line-width':4}});
+   await summaryReady;
+   const tileFallback=VectorRecovery.fallback(summary?.vector_tiles?.revision);
+   vectorMode=!!summary?.vector_tiles&&!tileFallback&&!new URLSearchParams(location.search).has('legacy-map');patterns();
+   if(vectorMode)map.addSource('buildings',{type:'vector',tiles:VectorRecovery.tiles(summary.vector_tiles),minzoom:15,maxzoom:16,bounds:summary.vector_tiles.bounds,promoteId:'volume_id'});
+   else map.addSource('buildings',{type:'geojson',generateId:false,promoteId:'volume_id',maxzoom:16,tolerance:.1,data:{type:'FeatureCollection',features:[]}});
+   map.addLayer({id:'volumes',type:'fill-extrusion',source:'buildings',...(vectorMode?{'source-layer':'buildings',minzoom:15}:{}),filter:['==',['get','render_parent'],true],paint:{'fill-extrusion-color':['coalesce',['feature-state','themeColor'],'#ffffff'],'fill-extrusion-pattern':['get','pattern'],'fill-extrusion-height':['get','height'],'fill-extrusion-base':['get','base_height'],'fill-extrusion-opacity':.94}});
+   map.addLayer({id:'edges',type:'line',source:'buildings',...(vectorMode?{'source-layer':'buildings',minzoom:15}:{}),filter:['==',['get','part'],false],paint:{'line-color':['coalesce',['feature-state','outlineColor'],'#52695e'],'line-width':['coalesce',['feature-state','outlineWidth'],.6],'line-opacity':.65}});
+   if(vectorMode)map.addSource('selected-building',{type:'geojson',data:{type:'FeatureCollection',features:[]}});
+   map.addLayer({id:'selection',type:'line',source:vectorMode?'selected-building':'buildings',filter:['==',['get','oid'],''],paint:{'line-color':'#ffbb25','line-width':4}});
    map.addSource('projects',{type:'geojson',data:{type:'FeatureCollection',features:[]}});
    const projectColor=['match',['get','code'],...themeConfig('renewal').bands.flatMap(([code])=>[code,colors[code]]),colors.unverified];
    map.addLayer({id:'project-footprint-interior',type:'fill',source:'projects',filter:['==',['geometry-type'],'Polygon'],paint:{'fill-opacity':0}});
@@ -526,14 +640,18 @@ async function init(){
     'line-color':projectColor,'line-width':4,'line-dasharray':[2,1]
    }});
    map.addLayer({id:'project-points',type:'circle',source:'projects',filter:['==',['geometry-type'],'Point'],paint:{'circle-radius':6,'circle-color':projectColor,'circle-stroke-color':'#173d36','circle-stroke-width':2}});
-   ready=true;home();if(state.q)search();
+   ready=true;document.body.dataset.buildingDelivery=vectorMode?'vector':'fallback';if(tileFallback&&!vectorMode)VectorRecovery.watch(map,summary.vector_tiles);MapViewMode.apply(state.mode);if(vectorMode)VectorView.paint();home();if(state.q)search();
    const initialState=state,initialId=state.id,initialRecord=state.rec;
    if(state===initialState&&detailSequence===0){
     if(initialId&&state.id===initialId)choose(initialId,false);
     else if(initialRecord&&state.rec===initialRecord)restoreRecord(initialRecord);
    }
   });
-  map.on('moveend',()=>{clearTimeout(moveTimer);moveTimer=setTimeout(()=>{loadMap();loadRenewalPoints()},130)});
+  map.on('sourcedata',e=>{if(vectorMode&&e.sourceId==='buildings')vectorNeedsRefresh=true});
+  map.on('idle',()=>{if(vectorMode&&ready&&vectorNeedsRefresh&&map.getZoom()>=15){vectorNeedsRefresh=false;loadVectorMap()}});
+  map.on('render',()=>{if(vectorMode&&ready){if(vectorNeedsRefresh&&map.getZoom()>=15&&!map.isMoving()&&map.isSourceLoaded('buildings')){vectorNeedsRefresh=false;loadVectorMap()}if(!document.body.dataset.mapFirstFrameMs&&map.queryRenderedFeatures({layers:['volumes']}).length)document.body.dataset.mapFirstFrameMs=String(Math.round(performance.now()));if(!$('#loading').hidden&&map.queryRenderedFeatures({layers:['volumes']}).length){$('#loading').hidden=true;$('#map-badge').textContent='Zgrade · odaberi zgradu.'}}});
+  map.on('movestart',()=>{lastMapMotion=performance.now()});
+  map.on('moveend',()=>{lastMapMotion=performance.now();clearTimeout(moveTimer);moveTimer=setTimeout(()=>{loadMap();loadRenewalPoints()},130)});
   map.on('click',e=>{
    if(!ready)return;
    if(activeTheme==='renewal'){
@@ -544,17 +662,17 @@ async function init(){
     }
     if(projects.length){openProjectMarkers([...new Set(projects.map(f=>String(f.properties.sid)))]);return}
    }
-   if(!map.isSourceLoaded('buildings'))return;
+   // Rendered roofs remain selectable while the next geometry upload is pending.
    const fs=map.queryRenderedFeatures(e.point,{layers:['volumes']});
    if(fs[0])choose(fs[0].properties.oid,true,false);
   });
-  map.on('mousemove',e=>{if(ready&&map.isSourceLoaded('buildings'))map.getCanvas().style.cursor=map.queryRenderedFeatures(e.point,{layers:['project-points','project-footprint','project-footprint-interior','volumes']}).length?'pointer':''});
+  map.on('mousemove',e=>{if(ready)map.getCanvas().style.cursor=map.queryRenderedFeatures(e.point,{layers:['project-points','project-footprint','project-footprint-interior','volumes']}).length?'pointer':''});
  }catch(e){$('#loading').innerHTML='<div>Prikaz se nije učitao: '+esc(e.message)+'<p><button onclick="location.reload()">Pokušaj ponovno</button></p></div>'}
 }
 $('#area').onchange=e=>{close(false);state.area=e.target.value;state.q='';sync();write();home()};
 $('#indicator').onchange=e=>{state.indicator=e.target.value;geometryDirty=true;write();renderMap();renderList()};
 $('#quality').onchange=e=>{state.quality=e.target.value;updateFilterCount();write();loadMap();if(state.id)choose(state.id,false,false)};
-$('#search').oninput=e=>{if(!$('#detail').hidden)close(false);state.q=e.target.value;write(true);clearTimeout(typingTimer);typingTimer=setTimeout(search,230)};
+$('#search').oninput=e=>{if(!$('#detail').hidden)close(false,false);state.q=e.target.value;if(innerWidth<=720&&!state.q.trim())setView('map');lastSearchInputAt=performance.now();write(true);searchController?.abort();searchSequence++;searchBusy=!!state.q.trim();searchResults=[];searchTotal=0;renderList();clearTimeout(typingTimer);typingTimer=setTimeout(search,120)};
 $('#known-only').onchange=e=>{state.only=e.target.checked;updateFilterCount();write();loadMap()};
 $('#home').onclick=resetView;$('#home-map').onclick=resetView;$('#more').onclick=()=>{limit+=30;renderList()};
 $('#rotate-left').onclick=()=>map?.easeTo({bearing:map.getBearing()-30,duration:300});$('#rotate-right').onclick=()=>map?.easeTo({bearing:map.getBearing()+30,duration:300});$('#tilt').onclick=()=>map?.easeTo({pitch:map.getPitch()>45?30:60,duration:300});
@@ -584,7 +702,7 @@ $('#retry-map').onclick=()=>{coverage=null;mapRetryAttempts=0;loadMap()};$('#exa
 $('#view-map').onclick=()=>setView('map');$('#view-list').onclick=()=>setView('list');
 document.addEventListener('click',e=>{if($('#filters').open&&!e.target.closest('#filters'))$('#filters').open=false});
 window.addEventListener('popstate',()=>{
- close(false);read();sync();themeLegend();
+ close(false);read();sync();MapViewMode.apply(state.mode);themeLegend();
  themeSequence++;clearTimeout(colorTimer);colorController?.abort();
  const seeded=applyThemeSeed();renderMap();renderList();
  home();loadRenewalPoints();
@@ -607,7 +725,7 @@ function themeLegend(){
  $('#scenario').value=floodScenario;$('#scenario-control').hidden=activeTheme!=='flood';$('#projects-button').hidden=activeTheme!=='renewal';
  $('#filters').hidden=activeTheme!=='energy';if($('.scope-note'))$('.scope-note').hidden=activeTheme!=='energy';
  document.querySelectorAll('button[data-theme]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.theme===activeTheme));
- document.body.dataset.theme=activeTheme;$('#map-shell').setAttribute('aria-label','3D karta Zagreba · '+({energy:'energetski razred',solar:'solarni potencijal',renewal:'obnova',flood:'poplave'}[activeTheme]));
+ document.body.dataset.theme=activeTheme;$('#map-shell').setAttribute('aria-label',(state.mode==='2d'?'2D':'3D')+' karta Zagreba · '+({energy:'energetski razred',solar:'solarni potencijal',renewal:'obnova',flood:'poplave'}[activeTheme]));
  if(activeTheme==='energy'){$('.legend').innerHTML=window.energyLegend;addLegendControl();return}
  $('.legend').innerHTML='<strong>'+c.title+'</strong><div class="theme-scale">'+c.bands.map(([key,label])=>'<span><i style="background:'+colors[key]+'"></i>'+esc(label)+'</span>').join('')+(activeTheme==='solar'?'<span class="estimate-key"><i></i>Šrafura: procjena</span>':'')+'</div>'+(activeTheme==='renewal'?'<div class="renewal-point-key"><i aria-hidden="true"></i><span>Krug: lokacija projekta</span></div><div class="renewal-point-key renewal-footprint-key"><i aria-hidden="true"></i><span>Isprekidani rub: potvrđeni projektni tlocrt</span></div>':'')+(activeTheme==='flood'?'<small class="map-scale-note">Hrvatske vode · poplavna opasnost · 1:25.000</small>':'')+'<details><summary>Kako čitati kartu</summary><p>'+c.note+'</p></details>';
  addLegendControl();
@@ -620,11 +738,12 @@ async function changeTheme(theme){
  if(!state.id&&!$('#detail').hidden)close(false);
  const seedReady=applyThemeSeed();renderMap();renderList();loadRenewalPoints();
  if(state.q.trim())search();
- if(state.only){coverage=null;loadMap()}else if(activeTheme!=='energy'){if(!seedReady)loadThemeColors()}else $('#map-badge').textContent='3D zgrade · odaberi zgradu.';
+ if(state.only){coverage=null;loadMap()}else if(activeTheme!=='energy'){if(!seedReady)loadThemeColors()}else $('#map-badge').textContent='Zgrade · odaberi zgradu.';
  if(state.id)choose(state.id,false,pendingSelection,preferredSourceAddress);
 }
 async function loadThemeColors(retry=false){
  if(!ready||activeTheme==='energy')return;
+ if(vectorMode){VectorView.paint();return}
  clearTimeout(colorTimer);colorController?.abort();colorController=new AbortController();
  const controller=colorController;let timedOut=false,waitTimer;
  const theme=activeTheme,scenario=floodScenario,seq=++colorSequence,ids=visible.map(f=>f.properties.id);
@@ -644,7 +763,7 @@ async function loadThemeColors(retry=false){
   if(!d.pending&&!failures){colorCache.set(key,d);if(colorCache.size>16)colorCache.delete(colorCache.keys().next().value)}
   renderMap();renderList();
   $('#theme-source-error').hidden=!failures;
-  $('#map-badge').textContent=d.pending?'Pripremam solarne podatke za '+fmt(d.pending)+' zgrada…':failures?'Solarni izvor nije dostupan za dio zgrada.':'3D zgrade · odaberi zgradu.';
+  $('#map-badge').textContent=d.pending?'Pripremam solarne podatke za '+fmt(d.pending)+' zgrada…':failures?'Solarni izvor nije dostupan za dio zgrada.':'Zgrade · odaberi zgradu.';
   window.lastColorLoad={theme,scenario,pending:d.pending||0,failures,at:performance.now()};
   if(selected?.properties.theme_data?.state==='pending'&&d.values[selected.properties.id]?.theme_data.state!=='pending'){
    detailCache.delete(state.id+'|'+state.quality+'|'+activeTheme+'|'+floodScenario);choose(state.id,false,false);
@@ -741,7 +860,12 @@ function projectLocation(r){
  }
  return '<p class="status-box"><b>'+esc(heading)+'</b> '+esc(description)+'</p>';
 }
-function projectContent(r,hideHeading=false,headingAlreadyShown=false){
+function independentReview(r){
+ const v=r.independent_review;
+ if(!v)return '';
+ return '<section class="status-box independent-review" aria-label="Provjera izvora"><b>'+esc(v.title)+'</b><p>'+esc(v.explanation)+'</p><small>Izvori ponovno provjereni '+esc(v.reviewed_on)+'</small><p>'+v.sources.map(s=>'<a href="'+esc(s.url)+'" target="_blank" rel="noreferrer">'+esc(s.label)+' ↗</a>').join(' · ')+'</p></section>';
+}
+function projectEvidenceContent(r,hideHeading=false,headingAlreadyShown=false){
  const a=r.attributes,code=projectCode(r),done=code==='done';
  const value=v=>v===null||v===undefined||v===''?'—':esc(v);
  const status=r.status_label||a.status||'Status prema izvoru';
@@ -764,8 +888,9 @@ function projectContent(r,hideHeading=false,headingAlreadyShown=false){
      const addresses=esc(target.addresses.join(' · '));
      return '<li>'+(target.oid===state.id?'<strong aria-current="true">'+addresses+'</strong>':'<button type="button" data-id="'+esc(target.oid)+'">'+addresses+'</button>')+'</li>';
     }).join('')+'</ul></div>' : '';
- return '<article class="project-detail" data-source-id="'+esc(r.source_id)+'">'+projectLocation(r)+(r.method?.includes('candidate')?'<div class="status-box">Moguća prostorna veza: projektna točka udaljena '+esc(r.distance_m)+' m od obrisa. Identitet zgrade nije potvrđen.</div>':'')+(headingAlreadyShown||hideHeading&&!r.systematic?'':'<h3>'+esc(a.naziv||a.vrsta||'Projekt')+'</h3><p>'+esc(a.adresa)+'</p>')+(r.source_disagreement?'<div class="source-disagreement status-box" role="note"><b>Različite potvrde izvora</b><p>'+esc(r.source_disagreement.explanation)+'</p><a href="'+esc(r.source_disagreement.source_url)+'" target="_blank" rel="noreferrer">Usporedi objavu Ministarstva ↗</a></div>':'')+'<p class="eyebrow">'+esc(r.renewal_kind||a.vrsta||'Vrsta zahvata nije navedena')+'</p>'+projectEvidenceDate(r)+targets+(r.access_evidence?.length?'<section class="status-box access-evidence" aria-label="Uporaba prostora i posjet"><b>Uporaba prostora i posjet</b>'+r.access_evidence.map(e=>'<p><strong>'+esc(e.label)+'</strong> · '+esc(e.event_date||'Provjereno '+e.checked_on)+'<br>'+esc(e.note)+' <a href="'+esc(e.url)+'" target="_blank" rel="noreferrer">Izvor ↗</a></p>').join('')+'</section>':'')+'<p class="project-status '+code+'" data-status="'+esc(a.status)+'">'+esc(status)+'</p>'+(a.datum_otvaranja?'<p><b>Ponovno otvoreno:</b> '+esc(a.datum_otvaranja)+'</p>':'')+(classesPresent?'<div class="class-pair"><div><small>Razred prije · izvor</small><b>'+value(a.energetski_razred_pr)+'</b></div><div><small>'+(done?'Razred nakon · izvor':'Ciljani razred · plan')+'</small><b>'+value(a.energetski_razred_nr)+'</b></div></div>':'<p>Razred prije i poslije nije objavljen u ovom izvoru.</p>')+'<p>'+esc(scopeNote)+'</p>'+projectStages(r)+(r.source_stage_note?'<p>'+esc(r.source_stage_note)+'</p>':'')+(r.followup_note?'<p class="status-box">'+(r.source_fields?.handover?'<b>Nakon primopredaje</b><br>':'')+esc(r.followup_note)+'</p>':'')+projectStageHistory(r)+'<details><summary>Pokazatelji i projekt</summary>'+(a.potrebna_energija_pr!=null||a.potrebna_energija_nr!=null?'<p>Potrebna energija prije: '+value(a.potrebna_energija_pr)+' '+esc(a.jedinica_pr||'jedinica nije navedena')+'.</p><p>Potrebna energija '+(done?'nakon':'planirana')+': '+value(a.potrebna_energija_nr)+' '+esc(a.jedinica_nr||'jedinica nije navedena')+'.</p>':'<p>Usporedivi pokazatelji potrošnje nisu objavljeni u ovom izvoru.</p>')+(a.dokumentacija_godina?'<p>Godina dokumentacije: '+value(a.dokumentacija_godina)+'. Nije nužno godina završetka.</p>':'')+'<p>'+esc(a.dokumentacija||'')+'</p><p>'+esc(a.rekonstrukcija||'')+'</p></details>'+sourceDisclosure(r)+'</article>';
+ return '<div class="project-evidence-content">'+projectLocation(r)+independentReview(r)+(r.method?.includes('candidate')?'<div class="status-box">Moguća prostorna veza: projektna točka udaljena '+esc(r.distance_m)+' m od obrisa. Identitet zgrade nije potvrđen.</div>':'')+(headingAlreadyShown||hideHeading&&!r.systematic?'':'<h3>'+esc(a.naziv||a.vrsta||'Projekt')+'</h3><p>'+esc(a.adresa)+'</p>')+(r.source_disagreement?'<div class="source-disagreement status-box" role="note"><b>Različite potvrde izvora</b><p>'+esc(r.source_disagreement.explanation)+'</p><a href="'+esc(r.source_disagreement.source_url)+'" target="_blank" rel="noreferrer">Usporedi objavu Ministarstva ↗</a></div>':'')+'<p class="eyebrow">'+esc(r.renewal_kind||a.vrsta||'Vrsta zahvata nije navedena')+'</p>'+projectEvidenceDate(r)+targets+(r.access_evidence?.length?'<section class="status-box access-evidence" aria-label="Uporaba prostora i posjet"><b>Uporaba prostora i posjet</b>'+r.access_evidence.map(e=>'<p><strong>'+esc(e.label)+'</strong> · '+esc(e.event_date||'Provjereno '+e.checked_on)+'<br>'+esc(e.note)+' <a href="'+esc(e.url)+'" target="_blank" rel="noreferrer">Izvor ↗</a></p>').join('')+'</section>':'')+'<p class="project-status '+code+'" data-status="'+esc(a.status)+'">'+esc(status)+'</p>'+(a.datum_otvaranja?'<p><b>Ponovno otvoreno:</b> '+esc(a.datum_otvaranja)+'</p>':'')+(classesPresent?'<div class="class-pair"><div><small>Razred prije · izvor</small><b>'+value(a.energetski_razred_pr)+'</b></div><div><small>'+(done?'Razred nakon · izvor':'Ciljani razred · plan')+'</small><b>'+value(a.energetski_razred_nr)+'</b></div></div>':'<p>Razred prije i poslije nije objavljen u ovom izvoru.</p>')+'<p>'+esc(scopeNote)+'</p>'+projectStages(r)+(r.source_stage_note?'<p>'+esc(r.source_stage_note)+'</p>':'')+(r.followup_note?'<p class="status-box">'+(r.source_fields?.handover?'<b>Nakon primopredaje</b><br>':'')+esc(r.followup_note)+'</p>':'')+projectStageHistory(r)+'<details><summary>Pokazatelji i projekt</summary>'+(a.potrebna_energija_pr!=null||a.potrebna_energija_nr!=null?'<p>Potrebna energija prije: '+value(a.potrebna_energija_pr)+' '+esc(a.jedinica_pr||'jedinica nije navedena')+'.</p><p>Potrebna energija '+(done?'nakon':'planirana')+': '+value(a.potrebna_energija_nr)+' '+esc(a.jedinica_nr||'jedinica nije navedena')+'.</p>':'<p>Usporedivi pokazatelji potrošnje nisu objavljeni u ovom izvoru.</p>')+(a.dokumentacija_godina?'<p>Godina dokumentacije: '+value(a.dokumentacija_godina)+'. Nije nužno godina završetka.</p>':'')+'<p>'+esc(a.dokumentacija||'')+'</p><p>'+esc(a.rekonstrukcija||'')+'</p></details>'+sourceDisclosure(r)+'</div>';
 }
+function projectContent(r,hideHeading=false,headingAlreadyShown=false){return BuildingCards.project(r,hideHeading,headingAlreadyShown)}
 function floodSummary(d){
  if(d.category==='overview')return floodOverviewSummary(d);
 
@@ -814,37 +939,14 @@ function renewalDetailHeading(p,d){
  if(named||addressed)heading.sourceLabel=named&&addressed?'Naziv projekta i adresa iz zapisa obnove':named?'Naziv projekta iz zapisa obnove':'Adresa iz zapisa obnove';
  return heading;
 }
-function renderDetail(f,preview=false){
- $('#detail').dataset.theme=activeTheme;
- if(activeTheme==='energy'){renderEnergyDetail(f);return}
- const p=f.properties,d=p.theme_data||{state:'error'},heading=activeTheme==='renewal'?renewalDetailHeading(p,d):{name:detailName(p),address:p.address||'',sourceLabel:''},name=heading.name;
- let body='';
- if(activeTheme==='solar'){
-  if(preview)body=solarResult(d)+(d.state==='estimate'&&solarEvidence(d)?'<p>Orijentacijska procjena površine. Osunčanost i prikladnost krova nisu provjerene.</p>':'')+'<p data-theme-detail-preview role="status">Učitavam metodu i izvor…</p>';
-  else if(d.state==='estimate'&&solarEvidence(d))body=solarResult(d)+'<p>'+(d.evidence_kind==='overlap_estimate'?'Površina je raspodijeljena prema prostornom preklapanju starijeg gradskog modela s ovim obrisom. Spoj nije potvrđen.':'Tlocrt '+fmt(d.footprint_m2)+' m² × '+fmt(d.assumed_suitable_fraction*100)+' % pretpostavljeno raspoloživog prostora.'+(d.building_use_known?'':' Namjena nije poznata; pretpostavljeno je 25 %.'))+'</p><p>Ovo nije provjerena prikladnost krova: nisu poznati osunčanost, nagib, statika ni zauzetost panelima. Proizvodnja i snaga nisu izračunate.</p>';
-  else if(solarEvidence(d)==='city_model')body=solarResult(d)+'<p>Površina modela krova prema izvoru: '+(d.roof_m2==null?'nije navedena':fmt(d.roof_m2)+' m²')+(d.useful_pct==null?'':' · prikladno '+fmt(d.useful_pct)+' %')+'.</p><p>Godišnja proizvodnja i snaga nisu izračunate: nema potvrđenog modela pretvorbe za ovaj krov.</p>';
-  else body='<p class="theme-result">'+(d.state==='pending'?'Pripremam podatke za ovu zgradu':d.state==='error'?'Izvor trenutačno nije dostupan':d.state==='ambiguous'?'Spoj krova nije jednoznačan':'Nema pouzdanog podatka za ovaj obris')+'</p><p>'+(d.message||'Stariji model krova i današnji obris mogu se razlikovati. Nije dodijeljena izmišljena površina.')+'</p>'+(d.state==='error'?'<button data-theme-retry>Pokušaj ponovno</button>':'');
-  if(!preview)body+='<div class="status-box">Prikladna površina nije postojeća elektrana. Stanje krova, statika, priključak i dozvole nisu provjereni.</div>'+sourceDisclosure(d);
- }else if(activeTheme==='renewal'){
-  if(preview){
-   const status=p.theme_value==='unverified'?'Status obnove nije provjeren':themeConfig().bands.find(([code])=>code===p.theme_value)?.[1]||'Podatak o obnovi nije dostupan';
-   body='<p class="theme-result">'+esc(status)+'</p>'+renewalStatusSummary(d)+'<p data-theme-detail-preview role="status">Učitavam zapise i izvore…</p>';
-  }else if(d.projects?.length){
-   const rows=orderProjectEvidence(d.projects,p.theme_value),disputed=!!d.source_disagreements?.length,label=disputed?'Izvori različito opisuju završetak':themeConfig().bands.find(([code])=>code===p.theme_value)?.[1]||'Status prema izvorima';
-   body=(rows.length>1||disputed?'<div class="renewal-overview" style="--status-color:'+colors[p.theme_value]+'"><b>'+esc(label)+'</b><p>'+rows.length+' zapisa za ovaj obris. Boja obrisa sažima evidentirane statuse. Ispod su vrsta, status i izvor svakog zahvata.</p>'+renewalStatusSummary(d)+'</div>':'')+rows.map(r=>projectContent(r,rows.length===1,rows.length===1&&!!heading.sourceLabel&&heading.name===r.attributes?.naziv&&norm(heading.address)===norm(r.attributes?.adresa||''))).join('');
-  }else body='<p class="theme-result">Status obnove nije provjeren</p><p>To ne znači da zgrada nije obnovljena. Dostupni registri i pojedinačne objave ne pokrivaju sve stvarne obnove.</p><button data-open-projects>Pretraži evidenciju obnove</button>';
- }else{
-  body='<div data-flood-summary aria-live="polite">'+floodSummary(d)+'</div><p>Orijentacijska karta područja, izvorno mjerilo 1:25.000. Preciznost ostaje ista pri svim razinama zumiranja.</p>'+(preview?'<p data-theme-detail-preview role="status">Učitavam metodu i izvor…</p>':sourceDisclosure(d));
- }
- $('#detail').innerHTML='<div class="detail-head"><span class="eyebrow">'+esc(activeTheme==='renewal'?(themeConfig().bands.find(([code])=>code===p.theme_value)?.[1]||themeConfig().title):themeConfig().title)+'</span><button class="close-icon" data-action="close" aria-label="Zatvori detalj">×</button></div><h2 class="detail-name">'+esc(name)+'</h2>'+(norm(name)===norm(heading.address)?'':'<p class="address">'+esc(heading.address||'Adresa nije upisana na obrisu')+'</p>')+(heading.sourceLabel?'<p class="scope-source" data-renewal-heading-source>'+esc(heading.sourceLabel)+'</p>':'')+body+'<details class="detail-section"><summary>Obris i 3D visina</summary><p>'+esc(p.height_basis)+'</p><p>Obris '+esc(p.id)+'. Visina može biti procjena.</p></details><button class="detail-map-button" data-action="show-map">Pokaži na karti</button>';
-}
+function renderDetail(f,preview=false){BuildingCards.render(f,preview)}
 function showMarkerProject(project,push=true){
  if(project.oid){choose(project.oid,push,false);return}
  close(false);
  focusedProject=project;
  state.rec='renewal-project:'+project.source_id;
  if(push)write();
- $('#detail').innerHTML='<div class="detail-head"><span class="eyebrow">'+(project.project_footprint?(project.project_footprint_kind==='topographic'?'Projekt iz evidencije · topografski tlocrt':'Projekt iz evidencije · katastarski tlocrt'):'Projekt iz evidencije · obris nije potvrđen')+'</span><button data-action="close" aria-label="Zatvori detalj">×</button></div>'+projectContent(project);
+ BuildingCards.standalone(project);
  openDetail();
  renderMap();
 }
@@ -1074,6 +1176,7 @@ function themeRowBadge(p){
 }
 
 function applyThemeSeed(){
+ if(vectorMode){$('#map-badge').textContent='Zgrade · odaberi zgradu.';return true}
  if(activeTheme==='energy')return true;
  let count=0;
  const fs=visible;

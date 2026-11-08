@@ -1,40 +1,8 @@
 {
-  "asset_revision": "mz-ux-v205",
-  "counts": {
-    "outlines": 129365,
-    "renewal_records": 7898,
-    "renewal_mapped_records": 4988,
-    "renewal_mapped_outlines": 4211,
-    "renewal_completed_points": 93,
-    "flood_assignments": 388095,
-    "renewal_project_footprints": {
-      "cadastral": 72,
-      "topographic": 4
-    },
-    "renewal_locations": {
-      "outline": 4988,
-      "footprint": 73,
-      "point": 2796,
-      "unlocated": 41
-    }
-  },
-  "source_archive": "moje-zgrade-0.3.0-internal-v203-de01168e95f1-final.zip",
-  "source_sha256": "e8ece2e6e357e640bcafea406f615f50d6db1722d63d8baea8f7d7d92ca40882",
-  "source_project_sha256": "de01168e95f1054f38d460bc13911c20cce200135cac6c081c9941953bd4ff2c",
-  "copied_at": "2026-11-07T17:07:17.608206+00:00",
-  "cloud_only_changes": [
-    "relative spatial directory",
-    "/tmp solar jobs; writes disabled by wrapper",
-    "read-only immutable database URIs at build",
-    "private legacy methodology link points to public sources page",
-    "static review documentation/evidence and external release download",
-    "Derived default flood exposure summary from all three existing raster results; no change to original geometry or source classes",
-    "Explicit scenario depth labels and three-row building comparison",
-    "Compact flood building outcome; duplicate address removed; source outcomes unchanged"
-  ],
-  "html_adjustments": [
-    "web/index.html",
-    "web/pokus/index.html"
-  ],
-  "base_asset_revision": "mz-flood-overview-v204"
+  "version": "mz-final-v213-flood-overview",
+  "private_base": "v212",
+  "public_flood_overview": true,
+  "renewal_project_records": 7898,
+  "vector_tiles": 3172,
+  "three_dimensional_only": true
 }

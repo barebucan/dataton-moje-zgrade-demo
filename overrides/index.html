@@ -1439,10 +1439,10 @@ async function choose(id,push=true,fly=true,sourceAddress='',revisionRetry=0){
    const packet=await json('/api/spatial/building/'+encodeURIComponent(id)+'?quality='+quality+'&theme=energy&bundle=1',controller?.signal);
    if(packet.theme_cards){
     const base={...packet};delete base.theme_cards;
-    for(const sc of ['mala','srednja','velika'])detailCache.set(id+'|'+quality+'|energy|'+sc,base);
+    for(const sc of ['mala','srednja','velika','overview'])detailCache.set(id+'|'+quality+'|energy|'+sc,base);
     for(const [key,properties] of Object.entries(packet.theme_cards)){
      const [theme,scenario='mala']=key.split(':');
-     for(const sc of (theme==='flood'?[scenario]:['mala','srednja','velika']))detailCache.set(id+'|'+quality+'|'+theme+'|'+sc,{...base,properties});
+     for(const sc of (theme==='flood'?[scenario]:['mala','srednja','velika','overview']))detailCache.set(id+'|'+quality+'|'+theme+'|'+sc,{...base,properties});
     }
     while(detailCache.size>288)detailCache.delete(detailCache.keys().next().value);
     f=detailCache.get(detailKey);

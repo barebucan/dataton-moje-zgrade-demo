@@ -1,4 +1,4 @@
-# Moje zgrade — konačna javna verzija v213
+# Moje zgrade — konačna javna verzija v214
 
 https://moje-zgrade-delta.vercel.app/
 
@@ -8,7 +8,7 @@ Zagreb: 129.365 kanonskih obrisa, 7.898 projektnih i događajnih zapisa obnove (
 
 ## Ponovljiva objava
 
-build.mjs preuzima https://github.com/barebucan/dataton-moje-zgrade-demo/releases/download/final-v213-20261108/moje-zgrade-runtime-final-v213.tar.gz i provjerava SHA256 df09da54d963f52e53e036256065f6eecab3aba6326f09f5f0ed2c783e971ad6. Runtime sadrži baze, geometriju, 3.172 vektorske pločice, web i Python kod. runtime-source i overrides sadrže čitljive kodove ove verzije; potpuni izvor je i u runtime arhivi. api/flood_overview.py izvodi pregled scenarija. Baze su read-only/immutable, nova obrada preko javne aplikacije isključena. Vercel objava nema vezu s Bartolom niti traži API tajne.
+build.mjs preuzima https://github.com/barebucan/dataton-moje-zgrade-demo/releases/download/final-v214-20261108/moje-zgrade-runtime-final-v214.tar.gz i provjerava SHA256 d9c9ab5711d961e00ca860cc3deb4eec30ba22fd28d1112b6f2a1533d0928a9f. Runtime sadrži baze, geometriju, 3.172 vektorske pločice, web i Python kod. runtime-source i overrides sadrže čitljive kodove ove verzije; potpuni izvor je i u runtime arhivi. api/flood_overview.py izvodi pregled scenarija. Baze su read-only/immutable, nova obrada preko javne aplikacije isključena. Vercel objava nema vezu s Bartolom niti traži API tajne.
 
 Poplavni pregled je zadan i u vektorskoj karti i u detalju. Sva tri izvorna rezultata ostaju dostupna, kao i pojedinačni scenariji. 3D je jedini ponuđeni način prikaza. Privremeni prekid pločica koristi automatski ponovni pokušaj, pomoćni prikaz i povratak u brži prikaz.
 

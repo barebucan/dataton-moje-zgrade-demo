@@ -72,7 +72,7 @@
   "redirects": [
     {
       "source": "/download",
-      "destination": "https://github.com/barebucan/dataton-moje-zgrade-demo/releases/download/final-v213-20261108/moje-zgrade-runtime-final-v213.tar.gz",
+      "destination": "https://github.com/barebucan/dataton-moje-zgrade-demo/releases/download/final-v214-20261108/moje-zgrade-runtime-final-v214.tar.gz",
       "permanent": false
     }
   ]

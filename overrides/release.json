@@ -1,5 +1,5 @@
 {
-  "asset_revision": "mz-flood-overview-v204",
+  "asset_revision": "mz-ux-v205",
   "counts": {
     "outlines": 129365,
     "renewal_records": 7898,
@@ -29,11 +29,12 @@
     "private legacy methodology link points to public sources page",
     "static review documentation/evidence and external release download",
     "Derived default flood exposure summary from all three existing raster results; no change to original geometry or source classes",
-    "Explicit scenario depth labels and three-row building comparison"
+    "Explicit scenario depth labels and three-row building comparison",
+    "Compact flood building outcome; duplicate address removed; source outcomes unchanged"
   ],
   "html_adjustments": [
     "web/index.html",
     "web/pokus/index.html"
   ],
-  "base_asset_revision": "mz-systematic-20261107-v203"
+  "base_asset_revision": "mz-flood-overview-v204"
 }

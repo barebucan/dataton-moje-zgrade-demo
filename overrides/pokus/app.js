@@ -815,6 +815,7 @@ function renewalDetailHeading(p,d){
  return heading;
 }
 function renderDetail(f,preview=false){
+ $('#detail').dataset.theme=activeTheme;
  if(activeTheme==='energy'){renderEnergyDetail(f);return}
  const p=f.properties,d=p.theme_data||{state:'error'},heading=activeTheme==='renewal'?renewalDetailHeading(p,d):{name:detailName(p),address:p.address||'',sourceLabel:''},name=heading.name;
  let body='';
@@ -835,7 +836,7 @@ function renderDetail(f,preview=false){
  }else{
   body='<div data-flood-summary aria-live="polite">'+floodSummary(d)+'</div><p>Orijentacijska karta područja, izvorno mjerilo 1:25.000. Preciznost ostaje ista pri svim razinama zumiranja.</p>'+(preview?'<p data-theme-detail-preview role="status">Učitavam metodu i izvor…</p>':sourceDisclosure(d));
  }
- $('#detail').innerHTML='<div class="detail-head"><span class="eyebrow">'+esc(activeTheme==='renewal'?(themeConfig().bands.find(([code])=>code===p.theme_value)?.[1]||themeConfig().title):themeConfig().title)+'</span><button class="close-icon" data-action="close" aria-label="Zatvori detalj">×</button></div><h2 class="detail-name">'+esc(name)+'</h2><p class="address">'+esc(heading.address||'Adresa nije upisana na obrisu')+'</p>'+(heading.sourceLabel?'<p class="scope-source" data-renewal-heading-source>'+esc(heading.sourceLabel)+'</p>':'')+body+'<details class="detail-section"><summary>Obris i 3D visina</summary><p>'+esc(p.height_basis)+'</p><p>Obris '+esc(p.id)+'. Visina može biti procjena.</p></details><button class="detail-map-button" data-action="show-map">Pokaži na karti</button>';
+ $('#detail').innerHTML='<div class="detail-head"><span class="eyebrow">'+esc(activeTheme==='renewal'?(themeConfig().bands.find(([code])=>code===p.theme_value)?.[1]||themeConfig().title):themeConfig().title)+'</span><button class="close-icon" data-action="close" aria-label="Zatvori detalj">×</button></div><h2 class="detail-name">'+esc(name)+'</h2>'+(norm(name)===norm(heading.address)?'':'<p class="address">'+esc(heading.address||'Adresa nije upisana na obrisu')+'</p>')+(heading.sourceLabel?'<p class="scope-source" data-renewal-heading-source>'+esc(heading.sourceLabel)+'</p>':'')+body+'<details class="detail-section"><summary>Obris i 3D visina</summary><p>'+esc(p.height_basis)+'</p><p>Obris '+esc(p.id)+'. Visina može biti procjena.</p></details><button class="detail-map-button" data-action="show-map">Pokaži na karti</button>';
 }
 function showMarkerProject(project,push=true){
  if(project.oid){choose(project.oid,push,false);return}
@@ -1121,9 +1122,9 @@ function themePalette(p){
 const floodOverviewLabels={h3:'Plavljenje prikazano u češćem scenariju',h2:'Plavljenje prikazano u stogodišnjem scenariju',h1:'Plavljenje prikazano u rijetkom / ekstremnom scenariju',clear:'Plavljenje nije prikazano ni u jednom od tri scenarija',incomplete:'Prikazana dubina uz nepotpunu usporedbu scenarija',edge:'Rubni dodir poplavnog područja',water:'Stalna vodena površina',unmapped:'Nedostupan podatak za usporedbu'};
 const floodOverviewShort={h3:'Češći scenarij',h2:'Stogodišnji',h1:'Rijetki / ekstremni',clear:'Bez prikaza',incomplete:'Nepotpuno',edge:'Rub',water:'Stalne vode',unmapped:'Nema podatka'};
 function floodOverviewSummary(d){
- if(!d.scenarios)return '<p class="scenario-name">Sažetak svih scenarija</p><p class="theme-result">'+esc(floodOverviewLabels[d.overview_code]||'Podatak se učitava')+'</p><p>Učitavam usporedbu scenarija…</p>';
+ if(!d.scenarios)return '<p class="theme-result flood-outcome" data-flood-outcome>'+esc(floodOverviewLabels[d.overview_code]||'Podatak se učitava')+'</p><p>Učitavam usporedbu scenarija…</p>';
 
  const names={velika:'Češće poplave',srednja:'Stogodišnja poplava',mala:'Rijetka / ekstremna poplava'},depth={1:'<0,5 m',2:'0,5–1,5 m',3:'1,5–2,5 m',4:'>2,5 m'};
- return '<p class="scenario-name">Sažetak svih scenarija</p><p class="theme-result">'+esc(floodOverviewLabels[d.overview_code]||'Podatak se učitava')+'</p><p>Za odabranu zgradu pogledaj kako se rezultat mijenja između scenarija:</p><table class="flood-comparison"><thead><tr><th>Scenarij</th><th>Rezultat na obrisu</th></tr></thead><tbody>'+['velika','srednja','mala'].map(sc=>{const r=d.scenarios[sc];const label=r.category==='depth'?'Dubina '+(depth[r.depth]||'nepoznata'):({no_value:'Plavljenje nije prikazano',edge:'Rubni dodir',water:'Stalne vode',outside:'Nema podatka'}[r.category]||'Nema podatka');return '<tr><th><button type="button" data-flood-scenario="'+sc+'">'+names[sc]+'</button></th><td>'+label+'</td></tr>'}).join('')+'</tbody></table><p class="scenario-note">Rijetki / ekstremni scenarij uključuje i moguća rušenja nasipa ili visokih brana. Dubina je modelirana za područje obrisa u odabranom scenariju.</p>';
+ return '<p class="theme-result flood-outcome" data-flood-outcome>'+esc(floodOverviewLabels[d.overview_code]||'Podatak se učitava')+'</p><table class="flood-comparison"><thead><tr><th>Scenarij</th><th>Rezultat na obrisu</th></tr></thead><tbody>'+['velika','srednja','mala'].map(sc=>{const r=d.scenarios[sc];const label=r.category==='depth'?'Dubina '+(depth[r.depth]||'nepoznata'):({no_value:'Plavljenje nije prikazano',edge:'Rubni dodir',water:'Stalne vode',outside:'Nema podatka'}[r.category]||'Nema podatka');return '<tr><th><button type="button" data-flood-scenario="'+sc+'">'+names[sc]+'</button></th><td>'+label+'</td></tr>'}).join('')+'</tbody></table><p class="scenario-note">Rijetki / ekstremni scenarij uključuje i moguća rušenja nasipa ili visokih brana. Dubina je modelirana za područje obrisa u odabranom scenariju.</p>';
 }
 document.addEventListener('click',e=>{const b=e.target.closest('[data-flood-scenario]');if(b){$('#scenario').value=b.dataset.floodScenario;$('#scenario').dispatchEvent(new Event('change'));}});

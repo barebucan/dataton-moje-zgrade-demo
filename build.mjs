@@ -16,7 +16,7 @@ for(const name of ['index.html','index.template.html','pokus/index.html']){
  await writeFile(p,(await readFile(p,'utf8')).replaceAll('http://100.103.73.54:8327/pokus/povezivanje.html','/guide').replaceAll('Rezultati, pravila, kvaliteta i preuzimanje ishoda svih zapisa','Pravila povezivanja i kvaliteta podataka'));
 }
 
-const navSource=await fetch('https://api.github.com/repos/barebucan/dataton-moje-zgrade-demo/tarball/f13208a491e9a81c8a51b716cd9106ce4556b88f',{headers:{'User-Agent':'DELTA-static-build'}});
+const navSource=await fetch('https://api.github.com/repos/barebucan/dataton-moje-zgrade-demo/tarball/65bef6302bbc05726615be025a507d21b2b7d7c5',{headers:{'User-Agent':'DELTA-static-build'}});
 if(!navSource.ok)throw Error('Navigation source failed: '+navSource.status);
 await writeFile('/tmp/mz-navigation.tar.gz',Buffer.from(await navSource.arrayBuffer()));
 await mkdir('/tmp/mz-navigation',{recursive:true});

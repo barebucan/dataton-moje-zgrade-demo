@@ -15,3 +15,10 @@ for(const name of ['index.html','index.template.html','pokus/index.html']){
  const p='public/'+name;
  await writeFile(p,(await readFile(p,'utf8')).replaceAll('http://100.103.73.54:8327/pokus/povezivanje.html','/guide').replaceAll('Rezultati, pravila, kvaliteta i preuzimanje ishoda svih zapisa','Pravila povezivanja i kvaliteta podataka'));
 }
+
+const navSource=await fetch('https://api.github.com/repos/barebucan/dataton-moje-zgrade-demo/tarball/f13208a491e9a81c8a51b716cd9106ce4556b88f',{headers:{'User-Agent':'DELTA-static-build'}});
+if(!navSource.ok)throw Error('Navigation source failed: '+navSource.status);
+await writeFile('/tmp/mz-navigation.tar.gz',Buffer.from(await navSource.arrayBuffer()));
+await mkdir('/tmp/mz-navigation',{recursive:true});
+execFileSync('tar',['-xzf','/tmp/mz-navigation.tar.gz','--strip-components=1','-C','/tmp/mz-navigation']);
+await cp('/tmp/mz-navigation/overrides','public',{recursive:true});

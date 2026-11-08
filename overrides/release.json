@@ -1,8 +1,10 @@
 {
-  "version": "mz-final-v214-flood-overview",
+  "version": "mz-navigation-v215",
   "private_base": "v212",
   "public_flood_overview": true,
   "renewal_project_records": 7898,
   "vector_tiles": 3172,
-  "three_dimensional_only": true
+  "three_dimensional_only": true,
+  "data_base": "reviewed-v212 / public-v214",
+  "navigation": "viewport, results return and entrance retention"
 }

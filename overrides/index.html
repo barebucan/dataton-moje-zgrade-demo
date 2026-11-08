@@ -259,6 +259,9 @@ body[data-theme=renewal] .legend .theme-scale i{border-width:2px}
  #detail[data-theme="flood"] .flood-outcome{font-size:16px!important;line-height:1.3;margin:6px 0 12px;font-weight:750}
  #detail[data-theme="flood"] .detail-head{min-height:40px;margin-bottom:5px}
 }
+
+/* A visible return action in every building card. */
+#detail .detail-head .detail-back{position:static;width:auto;min-width:90px;min-height:44px;padding:8px 11px;font-size:12px;font-weight:750;line-height:1.3;border:1px solid #abc1b5;border-radius:8px;background:#edf3ee;color:#173d36;flex-shrink:0}
 </style>
 
 
@@ -910,11 +913,24 @@ let state={mode:'3d',area:'kruge',indicator:'heating',quality:'default',q:'',onl
 function chosenClass(p){return activeTheme==='energy'?(p[state.indicator]||'unknown'):(p.theme_name===activeTheme?p.theme_value||'unknown':'unknown')}
 function badge(c,hatched=true){return '<span class="swatch '+light(c)+(hatched&&c!=='unknown'?' hatched':'')+'" style="--c:'+colors[c]+'">'+(c==='unknown'?'—':c==='multi'?'≋':c)+'</span>'}
 function toast(s){$('#toast').textContent=s;$('#toast').hidden=false;setTimeout(()=>$('#toast').hidden=true,4200)}
+const initialMapView=history.state?.mzView;
+function mapView(){
+ if(!ready||!map)return history.state?.mzView;
+ const c=map.getCenter();
+ return {center:[c.lng,c.lat],zoom:map.getZoom(),pitch:map.getPitch(),bearing:map.getBearing(),view:mobileView};
+}
+function rememberMapView(){if(ready)history.replaceState({...history.state,mzView:mapView()},'',location.href)}
+function restoreMapView(view){
+ if(!view||!Array.isArray(view.center)||view.center.length!==2||!view.center.every(Number.isFinite)||!Number.isFinite(view.zoom))return false;
+ map.jumpTo({center:view.center,zoom:view.zoom,pitch:view.pitch,bearing:view.bearing});
+ if(innerWidth<=720)setView(view.view==='list'&&!state.id?'list':'map');
+ loadMap();return true;
+}
 function write(replace=false){
  const p=new URLSearchParams({mode:state.mode,area:state.area,indicator:state.indicator});
  if(activeTheme!=='energy')p.set('theme',activeTheme);if(activeTheme==='flood'&&floodScenario!=='overview')p.set('scenario',floodScenario);
  if(state.quality!=='default')p.set('quality',state.quality);if(state.id)p.set('id',state.id);if(state.rec)p.set('record',state.rec);if(state.q)p.set('q',state.q);if(state.only)p.set('known','1');
- const hash='#'+p;if(location.hash!==hash)history[replace?'replaceState':'pushState'](null,'',hash);
+ const hash='#'+p;const entry={...history.state,mzView:mapView()};if(location.hash!==hash){if(!replace)history.replaceState(entry,'',location.href);history[replace?'replaceState':'pushState'](entry,'',hash);}
 }
 function read(){
  const p=new URLSearchParams(location.hash.slice(1));
@@ -1392,8 +1408,10 @@ function openDetail(){
  if(innerWidth<=720)setView('map');$('#detail').hidden=false;$('#map-shell').classList.add('detail-open');document.body.classList.add('has-detail');if(ready)map.resize();
  if(innerWidth<=720){$('#detail').setAttribute('role','region');$('#detail').removeAttribute('aria-modal');document.body.style.overflow='hidden'}else{$('#detail').setAttribute('role','region');$('#detail').removeAttribute('aria-modal')}
  const head=$('#detail .detail-head');
+ const back=head?.querySelector('[data-action="close"]');if(back){back.textContent=state.q.trim()?'← Rezultati':'← Karta';back.classList.remove('close-icon');back.classList.add('detail-back');back.setAttribute('aria-label',state.q.trim()?'Natrag na rezultate pretrage':'Natrag na kartu');}
  if(head&&!head.querySelector('[data-action="expand-detail"]'))head.querySelector('[data-action="close"]')?.insertAdjacentHTML('beforebegin','<button class="detail-expand" data-action="expand-detail" aria-expanded="'+document.body.classList.contains('detail-expanded')+'">'+(document.body.classList.contains('detail-expanded')?'Smanji':'Proširi')+'</button>');
  $('.legend').classList.remove('legend-expanded');const legendToggle=$('.legend-toggle');if(legendToggle){legendToggle.setAttribute('aria-expanded','false');legendToggle.setAttribute('aria-label','Prikaži legendu karte');legendToggle.textContent='Legenda'}
+ const entrance=$('#detail-entrance'),savedEntrance=history.state?.mzEntrances?.[state.id];if(entrance&&savedEntrance&&Array.from(entrance.options).some(o=>o.value===savedEntrance)){entrance.value=savedEntrance;entrance.dispatchEvent(new Event('change',{bubbles:true}));}
  $('#detail').scrollTop=0;if(!keepScenarioFocus)$('#detail [data-action="close"]')?.focus({preventScroll:true});
 }
 function center(f){const rings=f.geometry.type==='Polygon'?f.geometry.coordinates:f.geometry.coordinates.flat();const pts=rings.flat();return [pts.reduce((a,p)=>a+p[0],0)/pts.length,pts.reduce((a,p)=>a+p[1],0)/pts.length]}
@@ -1488,7 +1506,7 @@ async function restoreRecord(id){
  if(id.startsWith('renewal-project:')){if(activeTheme==='renewal')openProjectMarkers([id.slice('renewal-project:'.length)],true,false);return}
  try{const r=await json('/api/certificate/'+id);const d=await json('/api/spatial/search?q='+encodeURIComponent(r.certificate));const result=d.records.find(v=>v.record===Number(id));if(result)chooseRecord(result,false)}catch(e){toast(e.message)}
 }
-function close(push=true,restoreFocus=true){focusedProject=null;beginDetailRequest();state.id='';state.rec='';selected=null;$('#detail').hidden=true;$('#map-shell').classList.remove('detail-open');document.body.classList.remove('has-detail','detail-expanded');document.body.style.overflow='';if(ready)map.resize();if(push)write();renderMap();renderList();if(restoreFocus){if(previousFocus?.isConnected&&previousFocus.getClientRects().length)previousFocus.focus({preventScroll:true});else $('#search').focus({preventScroll:true})}}
+function close(push=true,restoreFocus=true){focusedProject=null;beginDetailRequest();state.id='';state.rec='';selected=null;$('#detail').hidden=true;$('#map-shell').classList.remove('detail-open');document.body.classList.remove('has-detail','detail-expanded');document.body.style.overflow='';if(ready)map.resize();if(push)write();renderMap();renderList();if(innerWidth<=720&&state.q.trim())setView('list');rememberMapView();if(restoreFocus){if(previousFocus?.isConnected&&previousFocus.getClientRects().length)previousFocus.focus({preventScroll:true});else $('#search').focus({preventScroll:true})}}
 const basemapDefinition={version:8,sources:{osm:{type:'raster',tiles:['zgrade-osm://tile.openstreetmap.org/{z}/{x}/{y}.png'],tileSize:256,attribution:'© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> suradnici · <a href="https://dgu.gov.hr/otvoreni-podaci-6596/6596">DGU</a> AD 25.10.2026 / BU 7.3.2024 · izvedeni spojevi'}},layers:[{id:'base',type:'raster',source:'osm',paint:{'raster-saturation':-.65,'raster-contrast':-.08,'raster-opacity':.72}}]};
 async function init(){
  read();
@@ -1538,10 +1556,10 @@ async function init(){
     'line-color':projectColor,'line-width':4,'line-dasharray':[2,1]
    }});
    map.addLayer({id:'project-points',type:'circle',source:'projects',filter:['==',['geometry-type'],'Point'],paint:{'circle-radius':6,'circle-color':projectColor,'circle-stroke-color':'#173d36','circle-stroke-width':2}});
-   ready=true;document.body.dataset.buildingDelivery=vectorMode?'vector':'fallback';if(tileFallback&&!vectorMode)VectorRecovery.watch(map,summary.vector_tiles);MapViewMode.apply(state.mode);if(vectorMode)VectorView.paint();home();if(state.q)search();
+   ready=true;document.body.dataset.buildingDelivery=vectorMode?'vector':'fallback';if(tileFallback&&!vectorMode)VectorRecovery.watch(map,summary.vector_tiles);MapViewMode.apply(state.mode);if(vectorMode)VectorView.paint();if(!restoreMapView(initialMapView))home();if(state.q)search();
    const initialState=state,initialId=state.id,initialRecord=state.rec;
    if(state===initialState&&detailSequence===0){
-    if(initialId&&state.id===initialId)choose(initialId,false);
+    if(initialId&&state.id===initialId)choose(initialId,false,!initialMapView);
     else if(initialRecord&&state.rec===initialRecord)restoreRecord(initialRecord);
    }
   });
@@ -1549,7 +1567,7 @@ async function init(){
   map.on('idle',()=>{if(vectorMode&&ready&&vectorNeedsRefresh&&map.getZoom()>=15){vectorNeedsRefresh=false;loadVectorMap()}});
   map.on('render',()=>{if(vectorMode&&ready){if(vectorNeedsRefresh&&map.getZoom()>=15&&!map.isMoving()&&map.isSourceLoaded('buildings')){vectorNeedsRefresh=false;loadVectorMap()}if(!document.body.dataset.mapFirstFrameMs&&map.queryRenderedFeatures({layers:['volumes']}).length)document.body.dataset.mapFirstFrameMs=String(Math.round(performance.now()));if(!$('#loading').hidden&&map.queryRenderedFeatures({layers:['volumes']}).length){$('#loading').hidden=true;$('#map-badge').textContent='Zgrade · odaberi zgradu.'}}});
   map.on('movestart',()=>{lastMapMotion=performance.now()});
-  map.on('moveend',()=>{lastMapMotion=performance.now();clearTimeout(moveTimer);moveTimer=setTimeout(()=>{loadMap();loadRenewalPoints()},130)});
+  map.on('moveend',()=>{rememberMapView();lastMapMotion=performance.now();clearTimeout(moveTimer);moveTimer=setTimeout(()=>{loadMap();loadRenewalPoints()},130)});
   map.on('click',e=>{
    if(!ready)return;
    if(activeTheme==='renewal'){
@@ -1579,6 +1597,7 @@ function resetView(){close(false);state.q='';sync();renderList();write();home();
 function mapShareUrl(){const url=new URL(location.href),hash=new URLSearchParams(url.hash.slice(1));hash.delete('id');hash.delete('record');url.hash=hash.toString();return url.href}
 document.addEventListener('change',e=>{
  if(e.target.id==='detail-entrance'){
+  if(state.id)history.replaceState({...history.state,mzEntrances:{...history.state?.mzEntrances,[state.id]:e.target.value}},'',location.href);
   document.querySelectorAll('.cert-address[data-entrance]').forEach(section=>section.hidden=section.dataset.entrance!==e.target.value);
  }
 });
@@ -1600,13 +1619,14 @@ $('#retry-map').onclick=()=>{coverage=null;mapRetryAttempts=0;loadMap()};$('#exa
 $('#view-map').onclick=()=>setView('map');$('#view-list').onclick=()=>setView('list');
 document.addEventListener('click',e=>{if($('#filters').open&&!e.target.closest('#filters'))$('#filters').open=false});
 window.addEventListener('popstate',()=>{
+ const savedView=history.state?.mzView;
  close(false);read();sync();MapViewMode.apply(state.mode);themeLegend();
  themeSequence++;clearTimeout(colorTimer);colorController?.abort();
  const seeded=applyThemeSeed();renderMap();renderList();
- home();loadRenewalPoints();
+ if(!restoreMapView(savedView))home();loadRenewalPoints();
  if(activeTheme!=='energy'&&!seeded)loadThemeColors();
  if(state.q)search();
- if(state.id)choose(state.id,false);
+ if(state.id)choose(state.id,false,false);
  else if(state.rec)restoreRecord(state.rec);
 });
 setupThemes();

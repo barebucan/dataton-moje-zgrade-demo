@@ -18,3 +18,14 @@ Prilagodbe za hosting: relativna prostorna putanja, privremena mapa poslova /tmp
 Završna javna provjera: sva četiri sloja, tri scenarija, pretraga i detalj zgrade, evidencija obnove i mobilni prikaz 390 px. Svih7898sažetih zapisa uspoređeno je poidentitetu,adresi,statusu, uz15potpunih detalja iizvorni certifikat. Bez JS/HTTP pogrešaka i privatnih zahtjeva u provjerenim tokovima. Detalji: PUBLIC_RELEASE.json.
 
 ![Javna v203](proof/v203-desktop.png)
+
+
+## Aktualna javna UX dorada · 8. 11. 2026.
+
+mz-ux-v205 over v203 data. https://moje-zgrade-delta.vercel.app/
+
+- Address shown once when it equals building name
+- Complete flood outcome visible immediately in compact 360/390px detail
+- All source scenario rows and expansion retained
+
+Provjereno na javnoj produkciji na desktopu i širinama 360/390 px. Aktualna geometrija, izvorni financijski podaci i poslužiteljski izračuni ostaju isti. Detalji: UX_RELEASE_20261108.json. Izvor frontend dorade: 96611f546579b686a4ac59abb392e35e51071f28.

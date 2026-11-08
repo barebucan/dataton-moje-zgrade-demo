@@ -1,4 +1,4 @@
-import {mkdir,writeFile,cp} from 'node:fs/promises';
+import {mkdir,writeFile,cp,readFile} from 'node:fs/promises';
 import {execFileSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
 const url="https://github.com/barebucan/dataton-moje-zgrade-demo/releases/download/final-v214-20261108/moje-zgrade-runtime-final-v214.tar.gz";
@@ -9,3 +9,9 @@ await writeFile('/tmp/mz-runtime.tar.gz',data);await mkdir('api',{recursive:true
 execFileSync('tar',['-xzf','/tmp/mz-runtime.tar.gz','-C','api']);
 await cp('api/runtime/web','public',{recursive:true});
 console.log('Final v214 vector buildings, reviewed renewal and flood overview prepared.');
+
+// Public documentation stays within the standalone deployment.
+for(const name of ['index.html','index.template.html','pokus/index.html']){
+ const p='public/'+name;
+ await writeFile(p,(await readFile(p,'utf8')).replaceAll('http://100.103.73.54:8327/pokus/povezivanje.html','/guide').replaceAll('Rezultati, pravila, kvaliteta i preuzimanje ishoda svih zapisa','Pravila povezivanja i kvaliteta podataka'));
+}

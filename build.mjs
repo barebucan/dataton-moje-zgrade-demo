@@ -22,7 +22,12 @@ const reviewPath='public/review.html';
 const review=await readFile(reviewPath,'utf8');
 await writeFile(reviewPath,review.replace('Interni izvorni paket s manifestom read-only baza','Javni runtime s obrađenim bazama (TAR.GZ)'));
 
-await cp('overrides','public',{recursive:true});
+const source=await fetch('https://api.github.com/repos/barebucan/dataton-moje-zgrade-demo/tarball/96611f546579b686a4ac59abb392e35e51071f28',{headers:{'User-Agent':'DELTA-static-build'}});
+if(!source.ok)throw Error('Source snapshot failed: '+source.status);
+await writeFile('/tmp/mz-source.tar.gz',Buffer.from(await source.arrayBuffer()));
+await mkdir('/tmp/mz-export',{recursive:true});
+execFileSync('tar',['-xzf','/tmp/mz-source.tar.gz','--strip-components=1','-C','/tmp/mz-export']);
+await cp('/tmp/mz-export/overrides','public',{recursive:true});
 
 const serverPath='api/runtime/server.py';
 await writeFile(serverPath,(await readFile(serverPath,'utf8')).replaceAll("['mala','srednja','velika']","['mala','srednja','velika','overview']"));

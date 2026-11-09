@@ -7,7 +7,7 @@ Interaktivna karta Zagreba povezuje energetske certifikate, solarni potencijal, 
 ## Isprobajte
 
 - [Otvori kartu](https://moje-zgrade-delta.vercel.app/)
-- [Paket s videom i uputama](https://github.com/barebucan/dataton-moje-zgrade-demo/releases/tag/datathon-predaja)
+- [Paket s videom i uputama](https://github.com/barebucan/dataton-moje-zgrade-demo/releases/tag/predaja)
 
 Prođite kroz četiri prikaza. U prikazu **Poplave** pretražite **Ivana Lučića 5** i odaberite južnu zgradu Fakulteta strojarstva i brodogradnje. Kartica prikazuje najveću modeliranu dubinu i rezultate za sva tri scenarija.
 

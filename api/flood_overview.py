@@ -1,6 +1,7 @@
 """Derive scenario exposure from existing reviewed raster classifications. No risk probabilities inferred."""
 SCENARIOS=('velika','srednja','mala')
 LABELS={'velika':'Češće poplave','srednja':'Stogodišnji scenarij','mala':'Rijetki / ekstremni scenarij'}
+# Keep each scenario classification for the building card and derive a separate map summary.
 def aggregate(rows):
  data={sc:(rows.get(sc) or {}).get('theme_data',{'category':'outside'}) for sc in SCENARIOS}
  cats={sc:d.get('category','outside') for sc,d in data.items()}

@@ -1,15 +1,26 @@
-# Moje zgrade — konačna javna verzija v214
+# Moje zgrade
 
-https://moje-zgrade-delta.vercel.app/
+Tim DELTA · Datathon Portala otvorenih podataka · Izazov B — Okoliš i održivi prostor
 
-Brži 3D prikaz temeljen na provjerenoj v212, uz sačuvan javni poplavni pregled svih triju scenarija. Četiri sloja: energetski certifikati, solarni potencijal, obnova i poplave. Interaktivni izbor zgrade i izvori iza detalja.
+Interaktivna karta Zagreba povezuje energetske certifikate, solarni potencijal, obnovu i modelirane poplave s adresama i obrisima zgrada. Građani i suvlasnici mogu pregledati podatak za zgradu i otvoriti pripadajući izvor.
 
-Zagreb: 129.365 kanonskih obrisa, 7.898 projektnih i događajnih zapisa obnove (nisu jedinstvene obnovljene zgrade). Uključene su neovisno pregledane ispravke deset statusa obnove iz v212. Podaci o poplavama ostaju tri postojeća modelirana scenarija.
+## Isprobajte
 
-## Ponovljiva objava
+- [Otvori kartu](https://moje-zgrade-delta.vercel.app/)
+- [Paket s videom i uputama](https://github.com/barebucan/dataton-moje-zgrade-demo/releases/tag/datathon-predaja)
 
-build.mjs preuzima https://github.com/barebucan/dataton-moje-zgrade-demo/releases/download/final-v214-20261108/moje-zgrade-runtime-final-v214.tar.gz i provjerava SHA256 d9c9ab5711d961e00ca860cc3deb4eec30ba22fd28d1112b6f2a1533d0928a9f. Runtime sadrži baze, geometriju, 3.172 vektorske pločice, web i Python kod. runtime-source i overrides sadrže čitljive kodove ove verzije; potpuni izvor je i u runtime arhivi. api/flood_overview.py izvodi pregled scenarija. Baze su read-only/immutable, nova obrada preko javne aplikacije isključena. Vercel objava nema vezu s Bartolom niti traži API tajne.
+Prođite kroz četiri prikaza. U prikazu **Poplave** pretražite **Ivana Lučića 5** i odaberite južnu zgradu Fakulteta strojarstva i brodogradnje. Kartica prikazuje najveću modeliranu dubinu i rezultate za sva tri scenarija.
 
-Poplavni pregled je zadan i u vektorskoj karti i u detalju. Sva tri izvorna rezultata ostaju dostupna, kao i pojedinačni scenariji. 3D je jedini ponuđeni način prikaza. Privremeni prekid pločica koristi automatski ponovni pokušaj, pomoćni prikaz i povratak u brži prikaz.
+## Struktura i pokretanje
 
-Izvori, vremenski presjeci, licence i ograničenja pojedinog podatka dostupni su kroz aplikaciju i dokumentaciju predaje. Razred stana ne postaje razred cijele zgrade; planirana obnova ne postaje izvedena; solarna procjena nije potvrda izvedivosti.
+| Mapa ili datoteka | Namjena |
+|---|---|
+| [api](api) | Poslužiteljske rute i sažetak poplavnih scenarija |
+| [runtime-source](runtime-source) | Python moduli za prostorno povezivanje, slojeve i izvore |
+| [overrides](overrides) | Sučelje karte, legenda i kartice zgrada |
+| `build.mjs` | Dohvat i provjera paketa s bazama, geometrijom i vektorskim pločicama |
+| `vercel.json` | Postavke objave i usmjeravanje zahtjeva |
+
+Python i SQLite povezuju prostorne i tematske zapise. Karta koristi pripremljene vektorske pločice, a pri odabiru zgrade učitava pripadajuće detalje. Za pripremu objave pokrenite `node build.mjs` iz korijena repozitorija. Potrebni su Node.js s ugrađenim `fetch`, `tar` i internetska veza. Skripta provjerava kontrolnu sumu preuzetog paketa prije raspakiravanja.
+
+[Izvori, metode i licence podataka](docs/IZVORI.md) · [Čitanje poplavnog prikaza](FLOOD_OVERVIEW.md) · [Licenca koda](LICENSE.txt)
